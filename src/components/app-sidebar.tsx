@@ -1,4 +1,4 @@
-import { LayoutDashboard, Zap, AudioWaveform, Activity, Factory, AlertTriangle, Gauge, GitMerge, LineChart } from 'lucide-react'
+import { LayoutDashboard, Zap, AudioWaveform, Activity, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import {
   Sidebar,
@@ -60,6 +60,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+
 
               {/* Dashboard */}
               <SidebarMenuItem>
@@ -201,6 +202,23 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
+              {/* Weather */}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/weather"
+                    className={({ isActive }) =>
+                      isActive
+                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
+                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
+                    }
+                  >
+                    <CloudSun size={16} />
+                    <span className="text-[13px]">Weather</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
 
               {/* System Health */}
               <SidebarMenuItem>
@@ -239,6 +257,35 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+
+        {/* Installer only section */}
+              {user?.role === 'INSTALLER' && (
+                <SidebarGroup>
+                  <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-gray-400">
+                    Installer
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                          <NavLink
+                            to="/installer"
+                            className={({ isActive }) =>
+                              isActive
+                                ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
+                                : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
+                            }
+                          >
+                            <Building2 size={16} />
+                            <span className="text-[13px]">Fleet Overview</span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              )}
 
         {/* Admin only section */}
         {user?.role === 'ADMIN' && (
