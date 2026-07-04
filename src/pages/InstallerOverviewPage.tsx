@@ -56,22 +56,22 @@ function KpiCard({
   footer?: string
 }) {
   return (
-    <div className={`bg-white rounded-xl border border-[#E2E8F0] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#22C55E]' : 'border-l-[#E2E8F0]'}`}>
+    <div className={`bg-white rounded-xl border border-[#E5E5E5] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#CC785C]' : 'border-l-[#E5E5E5]'}`}>
       <div className="flex items-start justify-between mb-2.5">
         <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#22C55E]/10' : 'bg-[#F4F6F9]'}`}>
-          <Icon size={13} className={accent ? 'text-[#22C55E]' : 'text-gray-400'} />
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#CC785C]/10' : 'bg-[#FAFAFA]'}`}>
+          <Icon size={13} className={accent ? 'text-[#CC785C]' : 'text-gray-400'} />
         </div>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-[#0F1E3C] tracking-tight leading-none">
+        <span className="text-[24px] font-semibold text-[#1A1A1A] tracking-tight leading-none">
           {value}
         </span>
         <span className="text-[12px] text-gray-400">{unit}</span>
       </div>
       {footer && (
         <div className="flex items-center gap-1.5 mt-2">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />}
+          {accent && <span className="w-1.5 h-1.5 rounded-full bg-[#CC785C]" />}
           <span className="text-[11px] text-gray-400">{footer}</span>
         </div>
       )}
@@ -83,9 +83,9 @@ function KpiCard({
 
 function CustomerCard({ customer }: { customer: CustomerSummary }) {
   return (
-    <Card className="border-[#E2E8F0] shadow-none rounded-xl">
+    <Card className="border-[#E5E5E5] shadow-none rounded-xl">
       <CardHeader className="pb-2 px-6 pt-5">
-        <CardTitle className="text-[14px] font-semibold text-[#0F1E3C]">
+        <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
           {customer.customer_name}
         </CardTitle>
         <p className="text-[12px] text-gray-400 mt-0.5">
@@ -93,10 +93,10 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
         </p>
       </CardHeader>
       <CardContent className="px-6 pb-5">
-        <div className="rounded-lg border border-[#E2E8F0] overflow-x-auto">
+        <div className="rounded-lg border border-[#E5E5E5] overflow-x-auto">
           <table className="w-full text-[13px] min-w-[700px]">
             <thead>
-              <tr className="border-b border-[#E2E8F0]">
+              <tr className="border-b border-[#E5E5E5]">
                 <th className="text-left text-[11px] uppercase tracking-wider text-gray-400 font-medium px-4 py-2">
                   Site
                 </th>
@@ -121,28 +121,28 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
               {customer.sites.map((site, i) => (
                 <tr
                   key={site.site_id}
-                  className={`border-b border-[#F8FAFC] hover:bg-[#F8FAFC] transition-colors ${i % 2 === 1 ? 'bg-[#FAFBFC]' : 'bg-white'}`}
+                  className={`border-b border-[#F1F1F1] hover:bg-[#FAFAFA] transition-colors ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
                 >
-                  <td className="py-3 px-4 font-medium text-[#0F1E3C]">
+                  <td className="py-3 px-4 font-medium text-[#1A1A1A]">
                     {site.site_name}
                   </td>
-                  <td className="py-3 px-3 text-right text-[#0F1E3C] font-medium tabular-nums">
+                  <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium tabular-nums">
                     {site.active_power_kw.toFixed(1)}
                   </td>
-                  <td className="py-3 px-3 text-right text-[#0F1E3C] font-medium tabular-nums">
+                  <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium tabular-nums">
                     {site.energy_today_kwh.toLocaleString()}
                   </td>
                   <td className="py-3 px-3 text-right tabular-nums">
-                    <span className={`font-medium ${site.inverters_online === site.inverters_total ? 'text-[#16A34A]' : 'text-amber-600'}`}>
+                    <span className={`font-medium ${site.inverters_online === site.inverters_total ? 'text-[#B5654A]' : 'text-amber-600'}`}>
                       {site.inverters_online}
                     </span>
                     <span className="text-gray-400 text-[11px]"> / {site.inverters_total}</span>
                   </td>
                   <td className="py-3 px-3 text-center">
                     <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                      site.meter_online ? 'bg-[#22C55E]/10 text-[#16A34A]' : 'bg-red-50 text-red-500'
+                      site.meter_online ? 'bg-[#CC785C]/10 text-[#B5654A]' : 'bg-red-50 text-red-500'
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${site.meter_online ? 'bg-[#22C55E]' : 'bg-red-400'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${site.meter_online ? 'bg-[#CC785C]' : 'bg-red-400'}`} />
                       {site.meter_online ? 'Online' : 'Offline'}
                     </span>
                   </td>
@@ -195,7 +195,7 @@ export default function InstallerOverviewPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-[#0F1E3C] tracking-tight">
+        <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
           Fleet Overview
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">

@@ -88,9 +88,9 @@ function formatValue(value: number) {
 function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-      status === 'online' ? 'bg-[#22C55E]/10 text-[#16A34A]' : 'bg-red-50 text-red-500'
+      status === 'online' ? 'bg-[#CC785C]/10 text-[#B5654A]' : 'bg-red-50 text-red-500'
     }`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-[#22C55E]' : 'bg-red-400'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-[#CC785C]' : 'bg-red-400'}`} />
       {status}
     </span>
   )
@@ -115,16 +115,16 @@ function MeterTable({
   let rowIndex = 0
 
   return (
-    <Card className="border-[#E2E8F0] shadow-none rounded-xl">
+    <Card className="border-[#E5E5E5] shadow-none rounded-xl">
       <CardHeader className="pb-2 px-6 pt-5">
-        <CardTitle className="text-[14px] font-semibold text-[#0F1E3C]">{title}</CardTitle>
+        <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">{title}</CardTitle>
         <p className="text-[12px] text-gray-400 mt-0.5">{subtitle}</p>
       </CardHeader>
       <CardContent className="px-6 pb-5">
-        <div className="rounded-lg border border-[#E2E8F0] overflow-x-auto">
+        <div className="rounded-lg border border-[#E5E5E5] overflow-x-auto">
           <table className="w-full text-[13px] min-w-[700px]">
             <thead>
-              <tr className="border-b border-[#E2E8F0]">
+              <tr className="border-b border-[#E5E5E5]">
                 <th className="sticky left-0 z-10 bg-white text-left text-[11px] uppercase tracking-wider text-gray-400 font-medium px-4 py-2">
                   Meter
                 </th>
@@ -147,7 +147,7 @@ function MeterTable({
                   <tr>
                     <td
                       colSpan={colSpan}
-                      className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-gray-400 font-semibold bg-[#F8FAFC] border-b border-[#F1F5F9]"
+                      className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-gray-400 font-semibold bg-[#FAFAFA] border-b border-[#F1F1F1]"
                     >
                       {group.label}
                     </td>
@@ -155,20 +155,20 @@ function MeterTable({
                   {group.meters.map((m) => {
                     const isStripe = rowIndex % 2 === 1
                     rowIndex += 1
-                    const rowBg = isStripe ? '#FAFBFC' : '#FFFFFF'
+                    const rowBg = isStripe ? '#FAFAFA' : '#FFFFFF'
                     return (
                       <tr
                         key={m.device_pk}
-                        className={`border-b border-[#F8FAFC] hover:bg-[#F8FAFC] transition-colors group ${isStripe ? 'bg-[#FAFBFC]' : 'bg-white'}`}
+                        className={`border-b border-[#F1F1F1] hover:bg-[#FAFAFA] transition-colors group ${isStripe ? 'bg-[#FAFAFA]' : 'bg-white'}`}
                       >
                         <td
-                          className="sticky left-0 z-10 py-3 px-4 font-medium text-[#0F1E3C] group-hover:bg-[#F8FAFC] transition-colors"
+                          className="sticky left-0 z-10 py-3 px-4 font-medium text-[#1A1A1A] group-hover:bg-[#FAFAFA] transition-colors"
                           style={{ background: rowBg }}
                         >
                           {m.name}
                         </td>
                         {columns.map((c) => (
-                          <td key={c.key} className="py-3 px-3 text-right text-[#0F1E3C] font-medium tabular-nums">
+                          <td key={c.key} className="py-3 px-3 text-right text-[#1A1A1A] font-medium tabular-nums">
                             {formatValue(m[c.key] as number)}
                           </td>
                         ))}
@@ -232,7 +232,7 @@ export default function MeterOverviewPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-[#0F1E3C] tracking-tight">
+        <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
           Meter Overview
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">

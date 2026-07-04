@@ -12,6 +12,7 @@ import MeterOverviewPage from './pages/MeterOverviewPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import InstallerOverviewPage from './pages/InstallerOverviewPage'
 import WeatherPage from './pages/WeatherPage'
+import NotFoundPage from './pages/NotFoundPage'
 
 function PrivateRoute() {
   const { user, isLoading } = useAuth()
@@ -52,7 +53,7 @@ export default function App() {
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/installer" element={<InstallerOverviewPage />} />
             <Route path="/weather" element={<WeatherPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>
       </Routes>

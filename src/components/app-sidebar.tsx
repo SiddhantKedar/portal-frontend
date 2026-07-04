@@ -20,6 +20,18 @@ import { ChevronRight } from 'lucide-react'
 import { useSite } from '@/context/SiteContext'
 import { useAuth } from '@/context/AuthContext'
 
+// Shared nav link styling — black sidebar, white body text, amber-600 for
+// the active item's pill background and for hover state text/tint.
+const NAV_ACTIVE =
+  'flex items-center gap-2.5 px-3 py-2 rounded-lg bg-amber-600 text-white font-medium'
+const NAV_INACTIVE =
+  'flex items-center gap-2.5 px-3 py-2 rounded-lg !text-gray-300 hover:bg-amber-600/10 hover:!text-amber-600 transition-colors'
+
+// Sub-items (inverter list) use !text overrides — SidebarMenuSubButton's
+// own base styles otherwise win the specificity fight and render black.
+const SUB_ACTIVE = 'text-[12px] font-medium'
+const SUB_INACTIVE = 'text-[12px]'
+
 export function AppSidebar() {
   const { site, devices } = useSite()
   const { user } = useAuth()
@@ -31,16 +43,16 @@ export function AppSidebar() {
   const hasMeters = devices.some((d) => d.device_type === 'METER' && d.is_active)
 
   return (
-    <Sidebar>
+    <Sidebar className="bg-black border-r border-white/10 text-white [&_[data-sidebar=sidebar]]:bg-black">
 
       {/* Logo */}
-      <SidebarHeader className="border-b border-[#E2E8F0] px-4 py-4">
+      <SidebarHeader className="border-b border-white/10 px-4 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-[30px] h-[30px] bg-[#0F1E3C] rounded-lg flex items-center justify-center">
-            <Zap size={15} className="text-[#22C55E]" />
+          <div className="w-[30px] h-[30px] bg-amber-600 rounded-lg flex items-center justify-center">
+            <Zap size={15} className="text-white" />
           </div>
           <div>
-            <span className="text-[15px] font-semibold text-[#0F1E3C] tracking-tight block">
+            <span className="text-[15px] font-semibold text-amber-500 tracking-tight block uppercase">
               Enerlynx
             </span>
             {site && (
@@ -55,7 +67,7 @@ export function AppSidebar() {
       {/* Nav */}
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-gray-400">
+          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
             Monitor
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -67,11 +79,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/dashboard"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <LayoutDashboard size={16} />
                     <span className="text-[13px]">Dashboard</span>
@@ -84,11 +92,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/plant"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <Factory size={16} />
                     <span className="text-[13px]">Plant Overview</span>
@@ -104,11 +108,7 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild className="flex-1">
                         <NavLink
                           to="/inverters"
-                          className={({ isActive }) =>
-                            isActive
-                              ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium'
-                              : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                          }
+                          className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                         >
                           <AudioWaveform size={16} />
                           <span className="text-[13px] font-medium">Inverter Overview</span>
@@ -116,7 +116,7 @@ export function AppSidebar() {
                       </SidebarMenuButton>
 
                       <CollapsibleTrigger asChild>
-                        <button className="ml-auto p-1 text-gray-400 hover:text-[#0F1E3C]">
+                        <button className="ml-auto p-1 text-gray-400 hover:text-amber-600">
                           <ChevronRight
                             size={14}
                             className="transition-transform group-data-[state=open]/collapsible:rotate-90"
@@ -132,11 +132,7 @@ export function AppSidebar() {
                             <SidebarMenuSubButton asChild>
                               <NavLink
                                 to={`/inverters/${inv.influx_device_id}`}
-                                className={({ isActive }) =>
-                                  isActive
-                                    ? 'text-[12px] text-[#0F1E3C] font-medium'
-                                    : 'text-[12px] text-gray-400 hover:text-[#0F1E3C]'
-                                }
+                                className={({ isActive }) => (isActive ? SUB_ACTIVE : SUB_INACTIVE)}
                               >
                                 {inv.name}
                               </NavLink>
@@ -154,11 +150,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/scb"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <GitMerge size={16} />
                     <span className="text-[13px]">SCB</span>
@@ -172,11 +164,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to="/meter"
-                      className={({ isActive }) =>
-                        isActive
-                          ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                          : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                      }
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
                       <Gauge size={16} />
                       <span className="text-[13px]">Meter Overview</span>
@@ -190,11 +178,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/analytics"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <LineChart size={16} />
                     <span className="text-[13px]">Analytics</span>
@@ -207,11 +191,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/weather"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <CloudSun size={16} />
                     <span className="text-[13px]">Weather</span>
@@ -225,11 +205,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/health"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <Activity size={16} />
                     <span className="text-[13px]">System Health</span>
@@ -242,11 +218,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/alerts"
-                    className={({ isActive }) =>
-                      isActive
-                        ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                        : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                    }
+                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <AlertTriangle size={16} />
                     <span className="text-[13px]">Fault Alerts</span>
@@ -262,7 +234,7 @@ export function AppSidebar() {
         {/* Installer only section */}
               {user?.role === 'INSTALLER' && (
                 <SidebarGroup>
-                  <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-gray-400">
+                  <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
                     Installer
                   </SidebarGroupLabel>
                   <SidebarGroupContent>
@@ -271,11 +243,7 @@ export function AppSidebar() {
                         <SidebarMenuButton asChild>
                           <NavLink
                             to="/installer"
-                            className={({ isActive }) =>
-                              isActive
-                                ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium '
-                                : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                            }
+                            className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                           >
                             <Building2 size={16} />
                             <span className="text-[13px]">Fleet Overview</span>
@@ -290,7 +258,7 @@ export function AppSidebar() {
         {/* Admin only section */}
         {user?.role === 'ADMIN' && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-gray-400">
+            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
               Admin
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -299,11 +267,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to="/users"
-                      className={({ isActive }) =>
-                        isActive
-                          ? 'flex items-center gap-2.5 text-[#0F1E3C] font-medium bg-[#F4F6F9] rounded-lg'
-                          : 'flex items-center gap-2.5 text-gray-500 hover:text-[#0F1E3C]'
-                      }
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
                       <LayoutDashboard size={16} />
                       <span className="text-[13px]">Users</span>
@@ -317,9 +281,9 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer */}
-      <SidebarFooter className="border-t border-[#E2E8F0] px-4 py-3">
+      <SidebarFooter className="border-t border-white/10 px-4 py-3">
         <div>
-          <p className="text-[12px] font-medium text-[#0F1E3C]">{user?.full_name}</p>
+          <p className="text-[12px] font-medium text-white">{user?.full_name}</p>
           <p className="text-[11px] text-gray-400">{user?.role}</p>
         </div>
       </SidebarFooter>

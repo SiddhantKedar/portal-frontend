@@ -40,15 +40,15 @@ function KpiCard({
   footer?: string
 }) {
   return (
-    <div className={`bg-white rounded-xl border border-[#E2E8F0] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#22C55E]' : 'border-l-[#E2E8F0]'}`}>
+    <div className={`bg-white rounded-xl border border-[#E5E5E5] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#CC785C]' : 'border-l-[#E5E5E5]'}`}>
       <div className="flex items-start justify-between mb-2.5">
         <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#22C55E]/10' : 'bg-[#F4F6F9]'}`}>
-          <Icon size={13} className={accent ? 'text-[#22C55E]' : 'text-gray-400'} />
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#CC785C]/10' : 'bg-[#FAFAFA]'}`}>
+          <Icon size={13} className={accent ? 'text-[#CC785C]' : 'text-gray-400'} />
         </div>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-[#0F1E3C] tracking-tight leading-none">
+        <span className="text-[24px] font-semibold text-[#1A1A1A] tracking-tight leading-none">
           {value}
         </span>
         <span className="text-[12px] text-gray-400">{unit}</span>
@@ -98,16 +98,16 @@ export default function WeatherPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-[#0F1E3C] tracking-tight">
+        <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
           Weather Station
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">
           <Clock size={12} />
           {data?.site} · {data?.device} · Last updated {data?.last_updated ? formatLastUpdated(data.last_updated) : '—'}
           <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ml-1 ${
-            data?.status === 'online' ? 'bg-[#22C55E]/10 text-[#16A34A]' : 'bg-red-50 text-red-500'
+            data?.status === 'online' ? 'bg-[#CC785C]/10 text-[#B5654A]' : 'bg-red-50 text-red-500'
           }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${data?.status === 'online' ? 'bg-[#22C55E]' : 'bg-red-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${data?.status === 'online' ? 'bg-[#CC785C]' : 'bg-red-400'}`} />
             {data?.status ?? '—'}
           </span>
         </p>

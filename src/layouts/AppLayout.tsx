@@ -31,15 +31,15 @@ export default function AppLayout() {
       <SidebarInset>
 
         {/* Topbar */}
-        <header className="flex h-14 items-center gap-4 border-b border-[#E2E8F0] bg-white px-6">
-          <SidebarTrigger className="text-gray-400 hover:text-[#0F1E3C]" />
+        <header className="flex h-14 items-center gap-4 border-b border-[#E5E5E5] bg-white px-6">
+          <SidebarTrigger className="text-gray-400 hover:text-amber-600" />
           <div className="flex-1" />
           <div className="flex items-center gap-3">
             <span className="text-[12px] text-gray-400">{user?.email}</span>
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-[#0F1E3C] border border-[#E2E8F0] rounded-lg px-3 py-1.5 transition-colors"
-            >
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-black border border-[#E5E5E5] rounded-lg px-3 py-1.5 transition-colors"
+              >
               <LogOut size={12} />
               Sign out
             </button>
@@ -47,7 +47,7 @@ export default function AppLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 bg-[#F4F6F9] p-6">
+        <main className="flex-1 bg-white p-6">
           <Outlet />
         </main>
 

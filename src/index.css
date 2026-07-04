@@ -83,6 +83,24 @@
     --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* SideBar overwrite colour */
+[data-sidebar="sidebar"] {
+  --sidebar:                  oklch(0.12 0.01 66);           /* true black bg */
+  --sidebar-foreground:       oklch(0.75 0 0);        /* gray-300 default text */
+  --sidebar-accent:           oklch(0.22 0.04 66);    /* dark amber tint — hover bg */
+  --sidebar-accent-foreground:oklch(0.7 0.15 66);     /* amber-600 — hover text */
+  --sidebar-border:           oklch(0.25 0 0);        /* subtle white/10 border */
+  --sidebar-primary:          oklch(0.67 0.18 66);    /* amber-600 */
+  --sidebar-primary-foreground:oklch(1 0 0);          /* white */
+}
+[data-sidebar="menu-sub-button"] {
+  color: white !important;
+}
+
+[data-sidebar="menu-sub-button"]:hover {
+  color: oklch(0.67 0.18 66) !important; /* amber-600 */
+}
+
 .dark {
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);

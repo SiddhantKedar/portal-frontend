@@ -59,8 +59,11 @@ interface ChartRow {
 
 // ---- Constants ----
 
+// Categorical palette for distinguishing an arbitrary number of device
+// series on one chart. First slot uses the brand terracotta; the rest
+// stay diverse and high-contrast so lines remain distinguishable.
 const PALETTE = [
-  '#22C55E', '#0F1E3C', '#F59E0B', '#3B82F6', '#EF4444',
+  '#CC785C', '#1A1A1A', '#F59E0B', '#3B82F6', '#EF4444',
   '#8B5CF6', '#EC4899', '#14B8A6', '#84CC16', '#F97316',
 ]
 
@@ -128,9 +131,9 @@ function DeviceMultiSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="h-9 px-3 text-[12px] border border-[#E2E8F0] rounded-lg bg-white text-left min-w-[180px] flex items-center justify-between gap-2"
+        className="h-9 px-3 text-[12px] border border-[#E5E5E5] rounded-lg bg-white text-left min-w-[180px] flex items-center justify-between gap-2"
       >
-        <span className={selected.length === 0 ? 'text-gray-400' : 'text-[#0F1E3C]'}>
+        <span className={selected.length === 0 ? 'text-gray-400' : 'text-[#1A1A1A]'}>
           {selected.length === 0
             ? 'Select devices'
             : `${selected.length} device${selected.length > 1 ? 's' : ''} selected`}
@@ -139,14 +142,14 @@ function DeviceMultiSelect({
       </button>
 
       {open && (
-        <div className="absolute z-[100] mt-1 w-64 bg-white border border-[#E2E8F0] rounded-lg shadow-lg">
-          <div className="p-2 border-b border-[#F1F5F9]">
+        <div className="absolute z-[100] mt-1 w-64 bg-white border border-[#E5E5E5] rounded-lg shadow-lg">
+          <div className="p-2 border-b border-[#F1F1F1]">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search devices..."
-              className="w-full h-8 px-2 text-[12px] border border-[#E2E8F0] rounded-md focus:outline-none focus:border-[#0F1E3C]"
+              className="w-full h-8 px-2 text-[12px] border border-[#E5E5E5] rounded-md focus:outline-none focus:border-[#1A1A1A]"
               autoFocus
             />
           </div>
@@ -157,15 +160,15 @@ function DeviceMultiSelect({
             {filtered.map((d) => (
               <label
                 key={d.id}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#F8FAFC] cursor-pointer text-[12px]"
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#FAFAFA] cursor-pointer text-[12px]"
               >
                 <input
                   type="checkbox"
                   checked={selected.includes(d.id)}
                   onChange={() => toggle(d.id)}
-                  className="rounded border-[#CBD5E1]"
+                  className="rounded border-[#D4D4D4]"
                 />
-                <span className="text-[#0F1E3C]">{d.name}</span>
+                <span className="text-[#1A1A1A]">{d.name}</span>
                 <span className="text-gray-400 text-[10px] ml-auto">
                   {d.device_type === 'INVERTER' ? 'Inverter' : 'Meter'}
                 </span>
@@ -233,11 +236,11 @@ function ChartRowCard({
   }, [lines])
 
   return (
-    <Card className="border-[#E2E8F0] shadow-none rounded-xl overflow-visible">
+    <Card className="border-[#E5E5E5] shadow-none rounded-xl overflow-visible">
       <CardHeader className="pb-2 px-6 pt-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <CardTitle className="text-[14px] font-semibold text-[#0F1E3C]">
+            <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
               {metric ? `${metric.label}${metric.unit ? ` (${metric.unit})` : ''}` : 'New Chart'}
             </CardTitle>
             {row.hasGenerated && row.data && (
@@ -276,7 +279,7 @@ function ChartRowCard({
                 error: null,
               })
             }}
-            className="h-9 px-3 text-[12px] border border-[#E2E8F0] rounded-lg bg-white text-[#0F1E3C] min-w-[190px] focus:outline-none focus:border-[#0F1E3C]"
+            className="h-9 px-3 text-[12px] border border-[#E5E5E5] rounded-lg bg-white text-[#1A1A1A] min-w-[190px] focus:outline-none focus:border-[#1A1A1A]"
           >
             <option value="">
               {metricsLoading ? 'Loading metrics...' : 'Select metric...'}
@@ -304,7 +307,7 @@ function ChartRowCard({
             type="button"
             onClick={onGenerate}
             disabled={!canGenerate}
-            className="h-9 px-4 text-[12px] font-medium rounded-lg bg-[#0F1E3C] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#162847] transition-colors flex items-center gap-1.5"
+            className="h-9 px-4 text-[12px] font-medium rounded-lg bg-[#CC785C] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#B5654A] transition-colors flex items-center gap-1.5"
           >
             {row.loading && <Loader2 size={13} className="animate-spin" />}
             {row.loading ? 'Loading...' : 'Generate'}
@@ -340,16 +343,16 @@ function ChartRowCard({
           <ChartContainer config={chartConfig} className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
                 <XAxis
                   dataKey="time"
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
                   tickLine={false}
                   axisLine={false}
                   width={42}
@@ -436,7 +439,7 @@ export default function AnalyticsPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-[#0F1E3C] tracking-tight">
+        <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
           Analytics
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5">
@@ -461,7 +464,7 @@ export default function AnalyticsPage() {
       <button
         type="button"
         onClick={addRow}
-        className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-[#0F1E3C] transition-colors"
+        className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-[#1A1A1A] transition-colors"
       >
         <Plus size={14} />
         Add Chart
