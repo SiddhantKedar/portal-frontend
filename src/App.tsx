@@ -10,6 +10,9 @@ import ScbPage from './pages/StringCombinerBoxPage'
 import AppLayout from './layouts/AppLayout'
 import MeterOverviewPage from './pages/MeterOverviewPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import InstallerOverviewPage from './pages/InstallerOverviewPage'
+import WeatherPage from './pages/WeatherPage'
+import NotFoundPage from './pages/NotFoundPage'
 
 function PrivateRoute() {
   const { user, isLoading } = useAuth()
@@ -48,7 +51,9 @@ export default function App() {
             <Route path="/scb" element={<ScbPage />} />
             <Route path="/meter" element={<MeterOverviewPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/installer" element={<InstallerOverviewPage />} />
+            <Route path="/weather" element={<WeatherPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>
       </Routes>

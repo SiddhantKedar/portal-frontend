@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -21,12 +20,8 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-
     try {
-      const response = await api.post<LoginResponse>('/auth/login/', {
-        email,
-        password,
-      })
+      const response = await api.post<LoginResponse>('/auth/login/', { email, password })
       const { access, refresh, user } = response.data
       login(access, refresh, user)
       navigate('/dashboard')
@@ -38,94 +33,104 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex items-center justify-center px-4">
-      <div className="w-full max-w-[420px]">
-        <Card className="border-[#E2E8F0] shadow-none rounded-2xl">
-          <CardContent className="p-10">
+    <div className="min-h-screen relative overflow-hidden bg-white flex items-center justify-center">
 
-            {/* Logo */}
-            <div className="flex items-center gap-2.5 mb-7">
-              <div className="w-[34px] h-[34px] bg-[#0F1E3C] rounded-lg flex items-center justify-center">
-                <Zap size={17} className="text-[#22C55E]" />
-              </div>
-              <span className="text-[17px] font-semibold text-[#0F1E3C] tracking-tight">
-                Enerlynx Portal
-              </span>
+      {/* Diagonal slash — black left half */}
+      <div
+        className="absolute inset-0 bg-black"
+        style={{ clipPath: 'polygon(0 0, 58% 0, 42% 100%, 0 100%)' }}
+      />
+
+      {/* Amber accent line along the slash edge */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'linear-gradient(to bottom, #D97706, #F59E0B)',
+          clipPath: 'polygon(57% 0, 59% 0, 43% 100%, 41% 100%)',
+        }}
+      />
+
+      {/* Login card — centered, overlaps the slash */}
+      <div className="relative z-10 w-full max-w-[400px] mx-4">
+        <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 border border-[#E5E5E5]">
+
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 mb-8">
+            <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center">
+              <Zap size={16} className="text-white" />
+            </div>
+            <span className="text-[15px] font-semibold text-black uppercase tracking-tight">
+              Enerlynx
+            </span>
+          </div>
+
+          <h1 className="text-[24px] font-bold text-black tracking-tight mb-1">
+            Sign in
+          </h1>
+          <p className="text-[13px] text-gray-400 mb-7">
+            Enter your credentials to continue
+          </p>
+
+          {/* Error */}
+          {error && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[12px] rounded-lg px-3.5 py-2.5 mb-5">
+              <AlertCircle size={14} className="shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-[12px] font-medium text-gray-600">
+                Email address
+              </Label>
+              <Input
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="h-10 bg-white border-[#E5E5E5] text-[13px] text-black placeholder:text-gray-300 focus-visible:ring-0 focus-visible:border-black rounded-lg"
+              />
             </div>
 
-            <div className="border-t border-[#E2E8F0] mb-7" />
+            <div className="space-y-1.5">
+              <Label className="text-[12px] font-medium text-gray-600">
+                Password
+              </Label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="h-10 bg-white border-[#E5E5E5] text-[13px] text-black placeholder:text-gray-300 focus-visible:ring-0 focus-visible:border-black rounded-lg"
+              />
+            </div>
 
-            {/* Heading */}
-            <h1 className="text-[20px] font-semibold text-[#0F1E3C] tracking-tight mb-1">
-              Sign in
-            </h1>
-            <p className="text-[13px] text-gray-400 mb-7">
-              Enter your credentials to continue
-            </p>
+            <div className="text-right">
+              <a href="#" className="text-[12px] text-gray-400 hover:text-black transition-colors">
+                Forgot password?
+              </a>
+            </div>
 
-            {/* Error */}
-            {error && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 text-[12px] rounded-lg px-3.5 py-2.5 mb-5">
-                <AlertCircle size={14} />
-                {error}
-              </div>
-            )}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-[42px] bg-amber-600 hover:bg-amber-700 text-white text-[14px] font-medium rounded-lg transition-colors"
+            >
+              {loading ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </form>
 
-            {/* Form */}
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-[12px] font-medium text-gray-600">
-                  Email address
-                </Label>
-                <Input
-                  type="email"
-                  placeholder="you@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="h-10 bg-[#F8FAFC] border-[#E2E8F0] text-[13px] text-[#0F1E3C] placeholder:text-[#CBD5E1] focus-visible:ring-0 focus-visible:border-[#0F1E3C]"
-                />
-              </div>
+          <p className="text-[11px] text-gray-300 text-center mt-8">
+            © 2026 Enerlynx Pvt Ltd
+          </p>
 
-              <div className="space-y-1.5">
-                <Label className="text-[12px] font-medium text-gray-600">
-                  Password
-                </Label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-10 bg-[#F8FAFC] border-[#E2E8F0] text-[13px] text-[#0F1E3C] placeholder:text-[#CBD5E1] focus-visible:ring-0 focus-visible:border-[#0F1E3C]"
-                />
-              </div>
-
-              <div className="text-right -mt-1">
-                <a
-                  href="#"
-                  className="text-[12px] text-gray-400 hover:text-[#0F1E3C] transition-colors"
-                >
-                  Forgot password?
-                </a>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-[42px] bg-[#0F1E3C] hover:bg-[#162847] text-white text-[14px] font-medium rounded-lg transition-colors"
-              >
-                {loading ? 'Signing in...' : 'Sign in'}
-              </Button>
-            </form>
-
-            <p className="text-[11px] text-[#CBD5E1] text-center mt-8">
-              © 2026 Enerlynx Pvt Ltd
-            </p>
-
-          </CardContent>
-        </Card>
+        </div>
       </div>
+
     </div>
   )
 }

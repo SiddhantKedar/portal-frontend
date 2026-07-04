@@ -59,10 +59,22 @@ interface DailyEnergyData {
 
 // ---- Helpers ----
 
-function formatTime(iso: string) {
+// Numeric position on a fixed 24hr axis (0–1440) so the power trend chart
+// always spans the full day regardless of how much real data exists yet.
+function minutesSinceMidnight(iso: string) {
   const d = new Date(iso)
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+function formatMinutesTick(minutes: number) {
+  const h = Math.floor(minutes / 60) % 24
+  const m = minutes % 60
+  const d = new Date()
+  d.setHours(h, m, 0, 0)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
+
+const DAY_TICKS = [0, 180, 360, 540, 720, 900, 1080, 1260, 1440]
 
 function formatLastUpdated(iso: string) {
   const d = new Date(iso)
@@ -94,22 +106,22 @@ function KpiCard({
   footer?: string
 }) {
   return (
-    <div className={`bg-white rounded-xl border border-[#E2E8F0] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#22C55E]' : 'border-l-[#E2E8F0]'}`}>
+    <div className={`bg-white rounded-xl border border-[#E5E5E5] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#CC785C]' : 'border-l-[#E5E5E5]'}`}>
       <div className="flex items-start justify-between mb-2.5">
         <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#22C55E]/10' : 'bg-[#F4F6F9]'}`}>
-          <Icon size={13} className={accent ? 'text-[#22C55E]' : 'text-gray-400'} />
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#CC785C]/10' : 'bg-[#FAFAFA]'}`}>
+          <Icon size={13} className={accent ? 'text-[#CC785C]' : 'text-gray-400'} />
         </div>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-[#0F1E3C] tracking-tight leading-none">
+        <span className="text-[24px] font-semibold text-[#1A1A1A] tracking-tight leading-none">
           {value}
         </span>
         <span className="text-[12px] text-gray-400">{unit}</span>
       </div>
       {footer && (
         <div className="flex items-center gap-1.5 mt-2">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />}
+          {accent && <span className="w-1.5 h-1.5 rounded-full bg-[#CC785C]" />}
           <span className="text-[11px] text-gray-400">{footer}</span>
         </div>
       )}
@@ -121,9 +133,9 @@ function KpiCard({
 
 function DetailRow({ label, value, unit, isLast = false }: { label: string; value: string | number; unit?: string; isLast?: boolean }) {
   return (
-    <tr className={isLast ? '' : 'border-b border-[#F8FAFC]'}>
+    <tr className={isLast ? '' : 'border-b border-[#F1F1F1]'}>
       <td className="py-2.5 text-[12px] text-gray-500">{label}</td>
-      <td className="py-2.5 text-right text-[13px] font-medium text-[#0F1E3C]">
+      <td className="py-2.5 text-right text-[13px] font-medium text-[#1A1A1A]">
         {value}
         {unit && <span className="text-[10px] text-gray-400 ml-1">{unit}</span>}
       </td>
@@ -222,7 +234,7 @@ export default function InverterDetailPage() {
   const trendChartData = useMemo(
     () =>
       trend.map((p) => ({
-        time: formatTime(p.time),
+        time: minutesSinceMidnight(p.time),
         dc: p.dc_input_power_kw,
         ac: p.ac_active_power_kw,
         reactive: p.ac_reactive_power_kvar,
@@ -258,13 +270,13 @@ export default function InverterDetailPage() {
   }
 
   const trendChartConfig = {
-    ac: { label: 'AC Active Power (kW)', color: '#22C55E' },
-    dc: { label: 'DC Input Power (kW)', color: '#0F1E3C' },
-    reactive: { label: 'AC Reactive Power (kVAR)', color: '#9CA3AF' },
+    ac: { label: 'AC Active Power (kW)', color: '#CC785C' },
+    dc: { label: 'DC Input Power (kW)', color: '#1A1A1A' },
+    reactive: { label: 'AC Reactive Power (kVAR)', color: '#8A8A8A' },
   }
 
   const dailyChartConfig = {
-    energy: { label: 'Energy (kWh)', color: '#0F1E3C' },
+    energy: { label: 'Energy (kWh)', color: '#1A1A1A' },
   }
 
   return (
@@ -273,13 +285,13 @@ export default function InverterDetailPage() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2.5">
-          <h1 className="text-[20px] font-semibold text-[#0F1E3C] tracking-tight">
+          <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
             {detail?.name}
           </h1>
           <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            detail?.status === 'online' ? 'bg-[#22C55E]/10 text-[#16A34A]' : 'bg-red-50 text-red-500'
+            detail?.status === 'online' ? 'bg-[#CC785C]/10 text-[#B5654A]' : 'bg-red-50 text-red-500'
           }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${detail?.status === 'online' ? 'bg-[#22C55E]' : 'bg-red-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${detail?.status === 'online' ? 'bg-[#CC785C]' : 'bg-red-400'}`} />
             {detail?.status}
           </span>
         </div>
@@ -327,11 +339,11 @@ export default function InverterDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
         {/* Power Trend - 2/3 width */}
-        <Card className="border-[#E2E8F0] shadow-none rounded-xl md:col-span-2">
+        <Card className="border-[#E5E5E5] shadow-none rounded-xl md:col-span-2">
           <CardHeader className="pb-2 px-6 pt-5">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <CardTitle className="text-[14px] font-semibold text-[#0F1E3C]">
+                <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
                   Power Trend
                 </CardTitle>
                 <p className="text-[12px] text-gray-400 mt-0.5">
@@ -354,8 +366,8 @@ export default function InverterDetailPage() {
                 <span
                   className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
                   style={{
-                    backgroundColor: hiddenSeries.has('ac') ? 'transparent' : '#22C55E',
-                    borderColor: hiddenSeries.has('ac') ? '#CBD5E1' : '#22C55E',
+                    backgroundColor: hiddenSeries.has('ac') ? 'transparent' : '#CC785C',
+                    borderColor: hiddenSeries.has('ac') ? '#D4D4D4' : '#CC785C',
                   }}
                 >
                   {!hiddenSeries.has('ac') && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -370,8 +382,8 @@ export default function InverterDetailPage() {
                 <span
                   className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
                   style={{
-                    backgroundColor: hiddenSeries.has('dc') ? 'transparent' : '#0F1E3C',
-                    borderColor: hiddenSeries.has('dc') ? '#CBD5E1' : '#0F1E3C',
+                    backgroundColor: hiddenSeries.has('dc') ? 'transparent' : '#1A1A1A',
+                    borderColor: hiddenSeries.has('dc') ? '#D4D4D4' : '#1A1A1A',
                   }}
                 >
                   {!hiddenSeries.has('dc') && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -386,8 +398,8 @@ export default function InverterDetailPage() {
                 <span
                   className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
                   style={{
-                    backgroundColor: hiddenSeries.has('reactive') ? 'transparent' : '#9CA3AF',
-                    borderColor: hiddenSeries.has('reactive') ? '#CBD5E1' : '#9CA3AF',
+                    backgroundColor: hiddenSeries.has('reactive') ? 'transparent' : '#8A8A8A',
+                    borderColor: hiddenSeries.has('reactive') ? '#D4D4D4' : '#8A8A8A',
                   }}
                 >
                   {!hiddenSeries.has('reactive') && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -407,57 +419,62 @@ export default function InverterDetailPage() {
                   <ComposedChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="acPowerGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22C55E" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
+                        <stop offset="5%" stopColor="#CC785C" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#CC785C" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
                     <XAxis
                       dataKey="time"
-                      tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                      type="number"
+                      domain={[0, 1440]}
+                      ticks={DAY_TICKS}
+                      tickFormatter={formatMinutesTick}
+                      tick={{ fontSize: 10, fill: '#8A8A8A' }}
                       tickLine={false}
                       axisLine={false}
-                      interval="preserveStartEnd"
                     />
                     <YAxis
-                      tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                      tick={{ fontSize: 10, fill: '#8A8A8A' }}
                       tickLine={false}
                       axisLine={false}
                       width={38}
                     />
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartTooltip
+                      content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
+                    />
                     {!hiddenSeries.has('ac') && (
                       <Area
                         type="monotone"
                         dataKey="ac"
-                        stroke="#22C55E"
+                        stroke="#CC785C"
                         strokeWidth={1.5}
                         fill="url(#acPowerGradient)"
                         dot={false}
                         connectNulls={false}
-                        activeDot={{ r: 4, fill: '#22C55E' }}
+                        activeDot={{ r: 4, fill: '#CC785C' }}
                       />
                     )}
                     {!hiddenSeries.has('dc') && (
                       <Line
                         type="monotone"
                         dataKey="dc"
-                        stroke="#0F1E3C"
+                        stroke="#1A1A1A"
                         strokeWidth={1.5}
                         dot={false}
                         connectNulls={false}
-                        activeDot={{ r: 4, fill: '#0F1E3C' }}
+                        activeDot={{ r: 4, fill: '#1A1A1A' }}
                       />
                     )}
                     {!hiddenSeries.has('reactive') && (
                       <Line
                         type="monotone"
                         dataKey="reactive"
-                        stroke="#9CA3AF"
+                        stroke="#8A8A8A"
                         strokeWidth={1.5}
                         dot={false}
                         connectNulls={false}
-                        activeDot={{ r: 4, fill: '#9CA3AF' }}
+                        activeDot={{ r: 4, fill: '#8A8A8A' }}
                       />
                     )}
                   </ComposedChart>
@@ -468,9 +485,9 @@ export default function InverterDetailPage() {
         </Card>
 
         {/* Electrical Details - 1/3 width */}
-        <Card className="border-[#E2E8F0] shadow-none rounded-xl">
+        <Card className="border-[#E5E5E5] shadow-none rounded-xl">
           <CardHeader className="pb-2 px-6 pt-5">
-            <CardTitle className="text-[14px] font-semibold text-[#0F1E3C]">
+            <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
               Electrical Details
             </CardTitle>
             <p className="text-[12px] text-gray-400 mt-0.5">Grid & power quality</p>
@@ -493,9 +510,9 @@ export default function InverterDetailPage() {
       </div>
 
       {/* Daily Energy */}
-      <Card className="border-[#E2E8F0] shadow-none rounded-xl">
+      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
         <CardHeader className="pb-2 px-6 pt-5">
-          <CardTitle className="text-[14px] font-semibold text-[#0F1E3C]">
+          <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
             Daily Energy
           </CardTitle>
           <p className="text-[12px] text-gray-400 mt-0.5">Last 7 days</p>
@@ -509,15 +526,15 @@ export default function InverterDetailPage() {
             <ChartContainer config={dailyChartConfig} className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailyChartData} margin={{ top: 24, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    tick={{ fontSize: 10, fill: '#8A8A8A' }}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    tick={{ fontSize: 10, fill: '#8A8A8A' }}
                     tickLine={false}
                     axisLine={false}
                     width={38}
@@ -534,7 +551,7 @@ export default function InverterDetailPage() {
                       style={{ fontSize: 12, fontWeight: 600, fill: '#475569' }}
                     />
                     {dailyChartData.map((d, i) => (
-                      <Cell key={i} fill={d.isToday ? '#22C55E' : '#0F1E3C'} />
+                      <Cell key={i} fill={d.isToday ? '#CC785C' : '#1A1A1A'} />
                     ))}
                   </Bar>
                 </BarChart>
