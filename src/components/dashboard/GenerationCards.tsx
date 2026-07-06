@@ -121,7 +121,7 @@ function PRCard() {
 
 // ---- CUF% Card ----
 function CUFCard() {
-  const [mode, setMode] = useState<'AC' | 'DC'>('AC')
+  const [mode] = useState<'AC' | 'DC'>('AC')
 
   const values = {
     AC: { actual: 19.2, targeted: 21.9 },
