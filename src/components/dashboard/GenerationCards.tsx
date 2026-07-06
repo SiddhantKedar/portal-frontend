@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
-import { BarChart, Bar, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid, Cell } from 'recharts'
+import { BarChart, Bar, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid } from 'recharts'
 
 // ---- Legend ----
 function Legend({ items }: { items: { color: string; label: string }[] }) {
