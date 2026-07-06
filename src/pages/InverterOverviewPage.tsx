@@ -53,8 +53,6 @@ interface PowerTrendData {
 
 // ---- Helpers ----
 
-// Numeric position on a fixed 24hr axis (0–1440) so the chart always
-// spans the full day regardless of how much real data exists yet.
 function minutesSinceMidnight(iso: string) {
   const d = new Date(iso)
   return d.getHours() * 60 + d.getMinutes()
@@ -85,7 +83,7 @@ function avgEfficiency(inverters: InverterData[]) {
   return avg.toFixed(1)
 }
 
-// ---- KPI Card ----
+// ---- KPI Card — matches PlantOverviewPage exactly ----
 
 function KpiCard({
   title, value, unit, icon: Icon, accent = false, footer,
@@ -98,18 +96,18 @@ function KpiCard({
   footer?: string
 }) {
   return (
-    <div className={`bg-white rounded-xl border border-[#E5E5E5] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#CC785C]' : 'border-l-[#E5E5E5]'}`}>
+    <div className={`bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] px-4 py-4 ${accent ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
       <div className="flex items-start justify-between mb-2.5">
-        <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">{title}</p>
+        <p className="text-[14px] uppercase tracking-wider text-black-400 font-medium">{title}</p>
         <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
           <Icon size={13} className={accent ? 'text-amber-600' : 'text-gray-400'} />
         </div>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-[#1A1A1A] tracking-tight leading-none">
+        <span className="text-[24px] font-semibold text-black tracking-tight leading-none">
           {value}
         </span>
-        <span className="text-[12px] text-gray-400">{unit}</span>
+        <span className="text-[12px] text-black-400">{unit}</span>
       </div>
       {footer && (
         <div className="flex items-center gap-1.5 mt-2">
@@ -138,11 +136,11 @@ export default function InverterOverviewPage() {
         const res = await api.get<InverterOverview>(`/influx/inverter/overview/?site=${site?.id}`)
         res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
         setOverview(res.data)
-        } catch (err) {
+      } catch (err) {
         console.error('Inverter overview error:', err)
-        } finally {
+      } finally {
         setLoading(false)
-        }
+      }
     }
     fetchOverview()
   }, [navigate])
@@ -166,7 +164,7 @@ export default function InverterOverviewPage() {
 
   const chartData = trend.map((p) => ({
     time: minutesSinceMidnight(p.time),
-    power: p.power_kw,
+    power: p.power_kw > 0 ? p.power_kw : null,
   }))
 
   const chartConfig = {
@@ -188,7 +186,7 @@ export default function InverterOverviewPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
+        <h1 className="text-[20px] font-semibold text-black tracking-tight">
           Inverter Overview
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">
@@ -198,7 +196,7 @@ export default function InverterOverviewPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 ">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           title="Total Active Power"
           value={overview?.summary.total_ac_active_power_kw ?? '—'}
@@ -233,10 +231,10 @@ export default function InverterOverviewPage() {
         />
       </div>
 
-      {/* Inverters Table — combined live data + efficiency/performance */}
+      {/* Inverters Table */}
       <Card className="border-[#E5E5E5] shadow-none rounded-xl">
         <CardHeader className="pb-2 px-6 pt-5">
-          <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
+          <CardTitle className="text-[18px] font-semibold text-black">
             Inverters
           </CardTitle>
           <p className="text-[12px] text-gray-400 mt-0.5">
@@ -283,7 +281,6 @@ export default function InverterOverviewPage() {
                   <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
                     Energy Today <span className="text-gray-400">(kWh)</span>
                   </th>
-                  
                   <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
                     Energy Total <span className="text-gray-400">(MWh)</span>
                   </th>
@@ -308,31 +305,30 @@ export default function InverterOverviewPage() {
                       className={`border-b border-[#F1F1F1] hover:bg-[#FAFAFA] transition-colors group ${isStripe ? 'bg-[#FAFAFA]' : 'bg-white'}`}
                     >
                       <td
-                        className="sticky left-0 z-10 py-3 px-4 font-medium text-[#1A1A1A] group-hover:bg-[#FAFAFA] transition-colors"
+                        className="sticky left-0 z-10 py-3 px-4 font-medium text-black group-hover:bg-[#FAFAFA] transition-colors"
                         style={{ background: rowBg }}
                       >
                         {inv.name}
                       </td>
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium ">
+                      <td className="py-3 px-3 text-right text-black font-medium">
                         {inv.ac_active_power_kw}
                       </td>
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium ">
+                      <td className="py-3 px-3 text-right text-black font-medium">
                         {inv.ac_reactive_power_kvar}
                       </td>
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium ">
+                      <td className="py-3 px-3 text-right text-black font-medium">
                         {inv.energy_daily_kwh.toLocaleString()}
                       </td>
-                      
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium ">
+                      <td className="py-3 px-3 text-right text-black font-medium">
                         {(inv.energy_total_kwh / 1000).toFixed(1)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium border-l-2 border-l-[#F1F1F1]">
+                      <td className="py-3 px-3 text-right text-black font-medium border-l-2 border-l-[#F1F1F1]">
                         {inv.inverter_efficiency_pct}%
                       </td>
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium ">
+                      <td className="py-3 px-3 text-right text-black font-medium">
                         {inv.ac_power_factor.toFixed(2)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[#1A1A1A] font-medium">
+                      <td className="py-3 px-3 text-right text-black font-medium">
                         {inv.grid_frequency_hz}
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -357,7 +353,7 @@ export default function InverterOverviewPage() {
         <CardHeader className="pb-2 px-6 pt-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
+              <CardTitle className="text-[18px] font-semibold text-black">
                 Power Trend
               </CardTitle>
               <p className="text-[12px] text-gray-400 mt-0.5">
@@ -382,8 +378,8 @@ export default function InverterOverviewPage() {
                 <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="invPowerGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#CC785C" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#CC785C" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#e17100" stopOpacity={0.18} />
+                      <stop offset="95%" stopColor="#e17100" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
@@ -409,12 +405,12 @@ export default function InverterOverviewPage() {
                   <Area
                     type="monotone"
                     dataKey="power"
-                    stroke="#CC785C"
+                    stroke="#e17100"
                     strokeWidth={1.5}
                     fill="url(#invPowerGradient)"
                     dot={false}
                     connectNulls={false}
-                    activeDot={{ r: 4, fill: '#CC785C' }}
+                    activeDot={{ r: 4, fill: '#e17100' }}
                   />
                 </AreaChart>
               </ResponsiveContainer>

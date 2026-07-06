@@ -73,20 +73,6 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
 
-
-              {/* Dashboard */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/dashboard"
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <LayoutDashboard size={16} />
-                    <span className="text-[13px]">Dashboard</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
               {/* Plant Overview */}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>

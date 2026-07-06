@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock, Zap, TrendingUp, Gauge, Activity } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
@@ -83,20 +83,107 @@ function formatValue(value: number) {
   return value.toFixed(2)
 }
 
+function formatLastUpdated(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 // ---- Status pill ----
 
 function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-      status === 'online' ? 'bg-[#CC785C]/10 text-[#B5654A]' : 'bg-red-50 text-red-500'
+      status === 'online' ? 'bg-green-500/10 text-green-700' : 'bg-red-50 text-red-500'
     }`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-[#CC785C]' : 'bg-red-400'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-green-500' : 'bg-red-400'}`} />
       {status}
     </span>
   )
 }
 
-// ---- Reusable grouped table — meters as rows (grouped by site type), parameters as columns ----
+// ---- Live snapshot card per meter ----
+
+function MeterSnapshotCard({ meter }: { meter: Meter }) {
+  const isHT = meter.name.toLowerCase().includes('ht')
+
+  return (
+    <Card className={`shadow-none rounded-xl border border-[#D4D4D4] border-l-[4px] ${isHT ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
+      <CardContent className="px-5 pt-4 pb-4">
+        {/* Meter name + status */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[15px] font-semibold text-black">{meter.name}</p>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 font-medium mt-0.5">
+              {meter.site_type === 'GENERATION' ? 'Generation Site' : 'Substation'}
+            </p>
+          </div>
+          <StatusPill status={meter.status} />
+        </div>
+
+        {/* Key metrics grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-start gap-2.5">
+            <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${isHT ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
+              <Zap size={12} className={isHT ? 'text-amber-600' : 'text-gray-400'} />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide">Active Power</p>
+              <p className="text-[16px] font-bold text-black leading-tight">
+                {meter.active_power_total_kw.toFixed(1)}
+                <span className="text-[10px] text-gray-400 font-normal ml-1">kW</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-[#FAFAFA]">
+              <TrendingUp size={12} className="text-gray-400" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide">Export Today</p>
+              <p className="text-[16px] font-bold text-black leading-tight">
+                {meter.energy_active_export_kwh.toLocaleString()}
+                <span className="text-[10px] text-gray-400 font-normal ml-1">kWh</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-[#FAFAFA]">
+              <Gauge size={12} className="text-gray-400" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide">Power Factor</p>
+              <p className="text-[16px] font-bold text-black leading-tight">
+                {meter.power_factor_total.toFixed(2)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-[#FAFAFA]">
+              <Activity size={12} className="text-gray-400" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide">Frequency</p>
+              <p className="text-[16px] font-bold text-black leading-tight">
+                {meter.grid_frequency_hz.toFixed(1)}
+                <span className="text-[10px] text-gray-400 font-normal ml-1">Hz</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Last updated */}
+        <p className="text-[10px] text-gray-400 mt-3 border-t border-[#F1F1F1] pt-2.5">
+          Updated {formatLastUpdated(meter.last_updated)}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---- Reusable grouped table ----
 
 interface MeterGroup {
   label: string
@@ -111,13 +198,13 @@ function MeterTable({
   groups: MeterGroup[]
   columns: ColumnDef[]
 }) {
-  const colSpan = columns.length + 2 // Meter column + data columns + Status column
+  const colSpan = columns.length + 2
   let rowIndex = 0
 
   return (
     <Card className="border-[#E5E5E5] shadow-none rounded-xl">
       <CardHeader className="pb-2 px-6 pt-5">
-        <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">{title}</CardTitle>
+        <CardTitle className="text-[18px] font-semibold text-black">{title}</CardTitle>
         <p className="text-[12px] text-gray-400 mt-0.5">{subtitle}</p>
       </CardHeader>
       <CardContent className="px-6 pb-5">
@@ -125,18 +212,18 @@ function MeterTable({
           <table className="w-full text-[13px] min-w-[700px]">
             <thead>
               <tr className="border-b border-[#E5E5E5]">
-                <th className="sticky left-0 z-10 bg-white text-left text-[11px] uppercase tracking-wider text-gray-400 font-medium px-4 py-2">
+                <th className="sticky left-0 z-10 bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-gray-400 font-semibold px-4 py-2">
                   Meter
                 </th>
                 {columns.map((c) => (
                   <th
                     key={c.key}
-                    className="text-right text-[11px] uppercase tracking-wider text-gray-400 font-medium px-3 py-2 whitespace-nowrap"
+                    className="bg-[#FAFAFA] text-right text-[11px] uppercase tracking-wider text-gray-400 font-semibold px-3 py-2 whitespace-nowrap"
                   >
                     {c.label}
                   </th>
                 ))}
-                <th className="text-right text-[11px] uppercase tracking-wider text-gray-400 font-medium px-4 py-2">
+                <th className="bg-[#FAFAFA] text-right text-[11px] uppercase tracking-wider text-gray-400 font-semibold px-4 py-2">
                   Status
                 </th>
               </tr>
@@ -147,7 +234,7 @@ function MeterTable({
                   <tr>
                     <td
                       colSpan={colSpan}
-                      className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-gray-400 font-semibold bg-[#FAFAFA] border-b border-[#F1F1F1]"
+                      className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-amber-700 font-semibold bg-amber-600/5 border-b border-[#F1F1F1]"
                     >
                       {group.label}
                     </td>
@@ -162,13 +249,13 @@ function MeterTable({
                         className={`border-b border-[#F1F1F1] hover:bg-[#FAFAFA] transition-colors group ${isStripe ? 'bg-[#FAFAFA]' : 'bg-white'}`}
                       >
                         <td
-                          className="sticky left-0 z-10 py-3 px-4 font-medium text-[#1A1A1A] group-hover:bg-[#FAFAFA] transition-colors"
+                          className="sticky left-0 z-10 py-3 px-4 font-medium text-black group-hover:bg-[#FAFAFA] transition-colors"
                           style={{ background: rowBg }}
                         >
                           {m.name}
                         </td>
                         {columns.map((c) => (
-                          <td key={c.key} className="py-3 px-3 text-right text-[#1A1A1A] font-medium tabular-nums">
+                          <td key={c.key} className="py-3 px-3 text-right text-black font-medium tabular-nums">
                             {formatValue(m[c.key] as number)}
                           </td>
                         ))}
@@ -232,15 +319,25 @@ export default function MeterOverviewPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
+        <h1 className="text-[20px] font-semibold text-black tracking-tight">
           Meter Overview
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">
           <Clock size={12} />
-          {data?.site}
+          {data?.site} · {data?.meters.length ?? 0} meter{(data?.meters.length ?? 0) !== 1 ? 's' : ''}
         </p>
       </div>
 
+      {/* Live snapshot cards — one per meter */}
+      {(data?.meters.length ?? 0) > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {data?.meters.map((m) => (
+            <MeterSnapshotCard key={m.device_pk} meter={m} />
+          ))}
+        </div>
+      )}
+
+      {/* Detailed tables */}
       {groups.length > 0 ? (
         <>
           <MeterTable title="Power" subtitle="Active, reactive & apparent power" groups={groups} columns={POWER_COLUMNS} />

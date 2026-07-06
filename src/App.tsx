@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
 import PlantOverviewPage from './pages/PlantOverviewPage'
 import InverterOverviewPage from './pages/InverterOverviewPage'
 import InverterDetailPage from './pages/InverterDetailPage'
@@ -44,7 +43,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<PrivateRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/" element={<Navigate to="/plant" replace />} />
             <Route path="/plant" element={<PlantOverviewPage />} />
             <Route path="/inverters" element={<InverterOverviewPage />} />
             <Route path="/inverters/:deviceId" element={<InverterDetailPage />} />
