@@ -57,6 +57,14 @@ interface PlantOverview {
     module_temp_c: number
     status: string
   } | null
+
+  performance: {
+    performance_ratio_pct: number
+    cuf_pct: number
+    poa_irradiation_kwh_m2: number
+    dc_power_total_kw: number
+    co2_avoided_today_kg: number
+  } | null
 }
 
 interface PowerTrendPoint {
@@ -430,14 +438,14 @@ export default function PlantOverviewPage() {
               <span className="text-[12px] text-gray-400">°C</span>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#22C55E] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">C02 avoided</p>
-            <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-              overview.weather.status === 'online' ? 'bg-[#22C55E]/10 text-[#16A34A]' : 'bg-red-50 text-red-500'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${overview.weather.status === 'online' ? 'bg-[#22C55E]' : 'bg-red-400'}`} />
-              {overview.weather.status}
-            </span>
+          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-4 py-3">
+            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">CO₂ Avoided</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[22px] font-semibold text-black">
+                {overview.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
+              </span>
+              <span className="text-[12px] text-gray-400">kg</span>
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
-import { Zap, TrendingUp, Gauge, Activity, Clock, Check } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Zap, TrendingUp, Gauge, Activity, Clock, Check, Maximize2, Minimize2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ChartContainer,
@@ -59,8 +60,6 @@ interface DailyEnergyData {
 
 // ---- Helpers ----
 
-// Numeric position on a fixed 24hr axis (0–1440) so the power trend chart
-// always spans the full day regardless of how much real data exists yet.
 function minutesSinceMidnight(iso: string) {
   const d = new Date(iso)
   return d.getHours() * 60 + d.getMinutes()
@@ -85,15 +84,13 @@ function todayString() {
   return new Date().toISOString().split('T')[0]
 }
 
-// De-dupe by date, keeping the last value seen for that date (defensive
-// against the backend occasionally returning a repeated boundary day)
 function dedupeDailyEnergy(points: DailyEnergyPoint[]) {
   const map = new Map<string, number>()
   points.forEach((p) => map.set(p.date, p.energy_kwh))
   return Array.from(map.entries()).map(([date, energy_kwh]) => ({ date, energy_kwh }))
 }
 
-// ---- KPI Card ----
+// ---- KPI Card — matches PlantOverviewPage exactly ----
 
 function KpiCard({
   title, value, unit, icon: Icon, accent = false, footer,
@@ -106,23 +103,23 @@ function KpiCard({
   footer?: string
 }) {
   return (
-    <div className={`bg-white rounded-xl border border-[#E5E5E5] border-l-[3px] px-4 py-4 ${accent ? 'border-l-[#CC785C]' : 'border-l-[#E5E5E5]'}`}>
+    <div className={`bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] px-4 py-4 ${accent ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
       <div className="flex items-start justify-between mb-2.5">
-        <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-[#CC785C]/10' : 'bg-[#FAFAFA]'}`}>
-          <Icon size={13} className={accent ? 'text-[#CC785C]' : 'text-gray-400'} />
+        <p className="text-[14px] uppercase tracking-wider text-black-400 font-medium">{title}</p>
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
+          <Icon size={13} className={accent ? 'text-amber-600' : 'text-gray-400'} />
         </div>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-[#1A1A1A] tracking-tight leading-none">
+        <span className="text-[24px] font-semibold text-black tracking-tight leading-none">
           {value}
         </span>
-        <span className="text-[12px] text-gray-400">{unit}</span>
+        <span className="text-[12px] text-black-400">{unit}</span>
       </div>
       {footer && (
         <div className="flex items-center gap-1.5 mt-2">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-[#CC785C]" />}
-          <span className="text-[11px] text-gray-400">{footer}</span>
+          {accent && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+          <span className="text-[11px] text-green-700">{footer}</span>
         </div>
       )}
     </div>
@@ -135,11 +132,167 @@ function DetailRow({ label, value, unit, isLast = false }: { label: string; valu
   return (
     <tr className={isLast ? '' : 'border-b border-[#F1F1F1]'}>
       <td className="py-2.5 text-[12px] text-gray-500">{label}</td>
-      <td className="py-2.5 text-right text-[13px] font-medium text-[#1A1A1A]">
+      <td className="py-2.5 text-right text-[13px] font-medium text-black">
         {value}
         {unit && <span className="text-[10px] text-gray-400 ml-1">{unit}</span>}
       </td>
     </tr>
+  )
+}
+
+// Power trend chart 
+function PowerTrendCard({
+  trendChartData, trendChartConfig, trendLoading, selectedDate, setSelectedDate,
+  hiddenSeries, toggleSeries, expanded, onToggle, height,
+}: {
+  trendChartData: { time: number; dc: number | null; ac: number | null; reactive: number | null }[]
+  trendChartConfig: Record<string, { label: string; color: string }>
+  trendLoading: boolean
+  selectedDate: string
+  setSelectedDate: (d: string) => void
+  hiddenSeries: Set<string>
+  toggleSeries: (key: string) => void
+  expanded: boolean
+  onToggle: () => void
+  height: string
+}) {
+  return (
+    <>
+      <CardHeader className="pb-2 px-6 pt-5">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <CardTitle className="text-[18px] font-semibold text-black">
+              Power Trend
+            </CardTitle>
+            <p className="text-[12px] text-gray-400 mt-0.5">
+              DC input · AC active · AC reactive · {selectedDate === todayString() ? 'Today' : selectedDate}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <DatePicker value={selectedDate} onChange={setSelectedDate} maxDate={new Date()} />
+            <button
+              type="button"
+              onClick={onToggle}
+              className="h-9 w-9 flex items-center justify-center border border-[#E5E5E5] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
+            >
+              {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 mt-3">
+          <button type="button" onClick={() => toggleSeries('ac')} className="flex items-center gap-1.5">
+            <span
+              className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
+              style={{
+                backgroundColor: hiddenSeries.has('ac') ? 'transparent' : '#e17100',
+                borderColor: hiddenSeries.has('ac') ? '#D4D4D4' : '#e17100',
+              }}
+            >
+              {!hiddenSeries.has('ac') && <Check size={10} className="text-white" strokeWidth={3} />}
+            </span>
+            <span className="text-[11px] text-gray-500">AC Active</span>
+          </button>
+          <button type="button" onClick={() => toggleSeries('dc')} className="flex items-center gap-1.5">
+            <span
+              className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
+              style={{
+                backgroundColor: hiddenSeries.has('dc') ? 'transparent' : '#497d00',
+                borderColor: hiddenSeries.has('dc') ? '#D4D4D4' : '#497d00',
+              }}
+            >
+              {!hiddenSeries.has('dc') && <Check size={10} className="text-white" strokeWidth={3} />}
+            </span>
+            <span className="text-[11px] text-gray-500">DC Input</span>
+          </button>
+          <button type="button" onClick={() => toggleSeries('reactive')} className="flex items-center gap-1.5">
+            <span
+              className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
+              style={{
+                backgroundColor: hiddenSeries.has('reactive') ? 'transparent' : '#8A8A8A',
+                borderColor: hiddenSeries.has('reactive') ? '#D4D4D4' : '#8A8A8A',
+              }}
+            >
+              {!hiddenSeries.has('reactive') && <Check size={10} className="text-white" strokeWidth={3} />}
+            </span>
+            <span className="text-[11px] text-gray-500">AC Reactive</span>
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="px-2 pb-4">
+        {trendLoading ? (
+          <div className={`${height} flex items-center justify-center`}>
+            <p className="text-[13px] text-gray-400">Loading chart...</p>
+          </div>
+        ) : (
+          <ChartContainer config={trendChartConfig} className={`${height} w-full`}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="acPowerGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#e17100" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#e17100" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+                <XAxis
+                  dataKey="time"
+                  type="number"
+                  domain={[0, 1440]}
+                  ticks={DAY_TICKS}
+                  tickFormatter={formatMinutesTick}
+                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={38}
+                />
+                <ChartTooltip
+                  content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
+                />
+                {!hiddenSeries.has('ac') && (
+                  <Area
+                    type="monotone"
+                    dataKey="ac"
+                    stroke="#e17100"
+                    strokeWidth={1.5}
+                    fill="url(#acPowerGradient)"
+                    dot={false}
+                    connectNulls={false}
+                    activeDot={{ r: 4, fill: '#e17100' }}
+                  />
+                )}
+                {!hiddenSeries.has('dc') && (
+                  <Line
+                    type="monotone"
+                    dataKey="dc"
+                    stroke="#497d00"
+                    strokeWidth={1.5}
+                    dot={false}
+                    connectNulls={false}
+                    activeDot={{ r: 4, fill: '#497d00' }}
+                  />
+                )}
+                {!hiddenSeries.has('reactive') && (
+                  <Line
+                    type="monotone"
+                    dataKey="reactive"
+                    stroke="#8A8A8A"
+                    strokeWidth={1.5}
+                    dot={false}
+                    connectNulls={false}
+                    activeDot={{ r: 4, fill: '#8A8A8A' }}
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+        )}
+      </CardContent>
+    </>
   )
 }
 
@@ -158,6 +311,7 @@ export default function InverterDetailPage() {
   const [trendLoading, setTrendLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState(todayString())
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set())
+  const [chartExpanded, setChartExpanded] = useState(false)
 
   function toggleSeries(key: string) {
     setHiddenSeries((prev) => {
@@ -212,7 +366,7 @@ export default function InverterDetailPage() {
     fetchTrend()
   }, [site?.id, device?.id, selectedDate])
 
-  // Daily energy (loads once)
+  // Daily energy
   useEffect(() => {
     if (!site?.id || !device?.id) return
     const fetchDailyEnergy = async () => {
@@ -235,9 +389,9 @@ export default function InverterDetailPage() {
     () =>
       trend.map((p) => ({
         time: minutesSinceMidnight(p.time),
-        dc: p.dc_input_power_kw,
-        ac: p.ac_active_power_kw,
-        reactive: p.ac_reactive_power_kvar,
+        dc: p.dc_input_power_kw > 0 ? p.dc_input_power_kw : null,
+        ac: p.ac_active_power_kw > 0 ? p.ac_active_power_kw : null,
+        reactive: p.ac_reactive_power_kvar > 0 ? p.ac_reactive_power_kvar : null,
       })),
     [trend]
   )
@@ -252,7 +406,6 @@ export default function InverterDetailPage() {
     [dailyEnergy]
   )
 
-  // Device not found in current site's device list (stale link, etc.)
   if (!device) {
     return (
       <div className="flex items-center justify-center h-60">
@@ -270,13 +423,13 @@ export default function InverterDetailPage() {
   }
 
   const trendChartConfig = {
-    ac: { label: 'AC Active Power (kW)', color: '#CC785C' },
-    dc: { label: 'DC Input Power (kW)', color: '#1A1A1A' },
+    ac: { label: 'AC Active Power (kW)', color: '#e17100' },
+    dc: { label: 'DC Input Power (kW)', color: '#497d00' },
     reactive: { label: 'AC Reactive Power (kVAR)', color: '#8A8A8A' },
   }
 
   const dailyChartConfig = {
-    energy: { label: 'Energy (kWh)', color: '#1A1A1A' },
+    energy: { label: 'Energy (kWh)', color: '#e17100' },
   }
 
   return (
@@ -285,13 +438,13 @@ export default function InverterDetailPage() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2.5">
-          <h1 className="text-[20px] font-semibold text-[#1A1A1A] tracking-tight">
+          <h1 className="text-[20px] font-semibold text-black tracking-tight">
             {detail?.name}
           </h1>
           <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            detail?.status === 'online' ? 'bg-[#CC785C]/10 text-[#B5654A]' : 'bg-red-50 text-red-500'
+            detail?.status === 'online' ? 'bg-green-500/10 text-green-700' : 'bg-red-50 text-red-500'
           }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${detail?.status === 'online' ? 'bg-[#CC785C]' : 'bg-red-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${detail?.status === 'online' ? 'bg-green-500' : 'bg-red-400'}`} />
             {detail?.status}
           </span>
         </div>
@@ -324,6 +477,7 @@ export default function InverterDetailPage() {
           value={detail ? (detail.energy_total_kwh / 1000).toFixed(1) : '—'}
           unit="MWh"
           icon={Gauge}
+          accent
           footer="Lifetime"
         />
         <KpiCard
@@ -331,6 +485,7 @@ export default function InverterDetailPage() {
           value={detail ? detail.inverter_efficiency_pct.toFixed(1) : '—'}
           unit="%"
           icon={Activity}
+          accent
           footer="Current"
         />
       </div>
@@ -340,154 +495,24 @@ export default function InverterDetailPage() {
 
         {/* Power Trend - 2/3 width */}
         <Card className="border-[#E5E5E5] shadow-none rounded-xl md:col-span-2">
-          <CardHeader className="pb-2 px-6 pt-5">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
-                  Power Trend
-                </CardTitle>
-                <p className="text-[12px] text-gray-400 mt-0.5">
-                  DC input · AC active · AC reactive · {selectedDate === todayString() ? 'Today' : selectedDate}
-                </p>
-              </div>
-              <DatePicker
-                value={selectedDate}
-                onChange={setSelectedDate}
-                maxDate={new Date()}
-              />
-            </div>
-            {/* Legend — click to toggle a series on/off */}
-            <div className="flex items-center gap-4 mt-3">
-              <button
-                type="button"
-                onClick={() => toggleSeries('ac')}
-                className="flex items-center gap-1.5"
-              >
-                <span
-                  className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
-                  style={{
-                    backgroundColor: hiddenSeries.has('ac') ? 'transparent' : '#CC785C',
-                    borderColor: hiddenSeries.has('ac') ? '#D4D4D4' : '#CC785C',
-                  }}
-                >
-                  {!hiddenSeries.has('ac') && <Check size={10} className="text-white" strokeWidth={3} />}
-                </span>
-                <span className="text-[11px] text-gray-500">AC Active</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => toggleSeries('dc')}
-                className="flex items-center gap-1.5"
-              >
-                <span
-                  className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
-                  style={{
-                    backgroundColor: hiddenSeries.has('dc') ? 'transparent' : '#1A1A1A',
-                    borderColor: hiddenSeries.has('dc') ? '#D4D4D4' : '#1A1A1A',
-                  }}
-                >
-                  {!hiddenSeries.has('dc') && <Check size={10} className="text-white" strokeWidth={3} />}
-                </span>
-                <span className="text-[11px] text-gray-500">DC Input</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => toggleSeries('reactive')}
-                className="flex items-center gap-1.5"
-              >
-                <span
-                  className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
-                  style={{
-                    backgroundColor: hiddenSeries.has('reactive') ? 'transparent' : '#8A8A8A',
-                    borderColor: hiddenSeries.has('reactive') ? '#D4D4D4' : '#8A8A8A',
-                  }}
-                >
-                  {!hiddenSeries.has('reactive') && <Check size={10} className="text-white" strokeWidth={3} />}
-                </span>
-                <span className="text-[11px] text-gray-500">AC Reactive</span>
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent className="px-2 pb-4">
-            {trendLoading ? (
-              <div className="h-[240px] flex items-center justify-center">
-                <p className="text-[13px] text-gray-400">Loading chart...</p>
-              </div>
-            ) : (
-              <ChartContainer config={trendChartConfig} className="h-[240px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="acPowerGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#CC785C" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#CC785C" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
-                    <XAxis
-                      dataKey="time"
-                      type="number"
-                      domain={[0, 1440]}
-                      ticks={DAY_TICKS}
-                      tickFormatter={formatMinutesTick}
-                      tick={{ fontSize: 10, fill: '#8A8A8A' }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: '#8A8A8A' }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={38}
-                    />
-                    <ChartTooltip
-                      content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
-                    />
-                    {!hiddenSeries.has('ac') && (
-                      <Area
-                        type="monotone"
-                        dataKey="ac"
-                        stroke="#CC785C"
-                        strokeWidth={1.5}
-                        fill="url(#acPowerGradient)"
-                        dot={false}
-                        connectNulls={false}
-                        activeDot={{ r: 4, fill: '#CC785C' }}
-                      />
-                    )}
-                    {!hiddenSeries.has('dc') && (
-                      <Line
-                        type="monotone"
-                        dataKey="dc"
-                        stroke="#1A1A1A"
-                        strokeWidth={1.5}
-                        dot={false}
-                        connectNulls={false}
-                        activeDot={{ r: 4, fill: '#1A1A1A' }}
-                      />
-                    )}
-                    {!hiddenSeries.has('reactive') && (
-                      <Line
-                        type="monotone"
-                        dataKey="reactive"
-                        stroke="#8A8A8A"
-                        strokeWidth={1.5}
-                        dot={false}
-                        connectNulls={false}
-                        activeDot={{ r: 4, fill: '#8A8A8A' }}
-                      />
-                    )}
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            )}
-          </CardContent>
+          <PowerTrendCard
+            trendChartData={trendChartData}
+            trendChartConfig={trendChartConfig}
+            trendLoading={trendLoading}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            hiddenSeries={hiddenSeries}
+            toggleSeries={toggleSeries}
+            expanded={chartExpanded}
+            onToggle={() => setChartExpanded(o => !o)}
+            height="h-[240px]"
+          />
         </Card>
 
         {/* Electrical Details - 1/3 width */}
         <Card className="border-[#E5E5E5] shadow-none rounded-xl">
           <CardHeader className="pb-2 px-6 pt-5">
-            <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
+            <CardTitle className="text-[18px] font-semibold text-black">
               Electrical Details
             </CardTitle>
             <p className="text-[12px] text-gray-400 mt-0.5">Grid & power quality</p>
@@ -509,10 +534,38 @@ export default function InverterDetailPage() {
 
       </div>
 
+      {/* Modal overlay */}
+      {chartExpanded && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ backdropFilter: 'blur(6px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setChartExpanded(false)}
+        >
+          <div
+            className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PowerTrendCard
+              trendChartData={trendChartData}
+              trendChartConfig={trendChartConfig}
+              trendLoading={trendLoading}
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              hiddenSeries={hiddenSeries}
+              toggleSeries={toggleSeries}
+              expanded={chartExpanded}
+              onToggle={() => setChartExpanded(false)}
+              height="h-[480px]"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Daily Energy */}
       <Card className="border-[#E5E5E5] shadow-none rounded-xl">
         <CardHeader className="pb-2 px-6 pt-5">
-          <CardTitle className="text-[14px] font-semibold text-[#1A1A1A]">
+          <CardTitle className="text-[18px] font-semibold text-black">
             Daily Energy
           </CardTitle>
           <p className="text-[12px] text-gray-400 mt-0.5">Last 7 days</p>
@@ -544,14 +597,14 @@ export default function InverterDetailPage() {
                     <LabelList
                       dataKey="energy"
                       position="top"
-                      formatter={(value) => {
+                      formatter={(value: unknown) => {
                         const num = typeof value === 'number' ? value : Number(value)
-                        return Number.isFinite(num) ? num.toFixed(1) : ''
+                        return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0kWh` : ''
                       }}
-                      style={{ fontSize: 12, fontWeight: 600, fill: '#475569' }}
+                      style={{ fontSize: 11, fontWeight: 600, fill: '#02060c' }}
                     />
                     {dailyChartData.map((d, i) => (
-                      <Cell key={i} fill={d.isToday ? '#CC785C' : '#1A1A1A'} />
+                      <Cell key={i} fill={d.isToday ? '#e17100' : '#1A1A1A'} />
                     ))}
                   </Bar>
                 </BarChart>
