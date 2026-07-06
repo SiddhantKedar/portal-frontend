@@ -1,6 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
-import { BarChart, Bar, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid  } from 'recharts'
-import { useState } from 'react'
+import { BarChart, Bar, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid, Cell } from 'recharts'
 
 // ---- Legend ----
 function Legend({ items }: { items: { color: string; label: string }[] }) {
@@ -34,14 +33,17 @@ function GenerationCard({ actualToday }: { actualToday: number }) {
         <div className="h-[180px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-                data={data}
-                margin={{ top: 22, right: 8, left: 8, bottom: 0 }}
-                barCategoryGap="20%"
-                barSize={48}
-              >
-              <CartesianGrid  stroke="#f3e5e57a"  vertical={false} />
+              data={data}
+              margin={{ top: 22, right: 8, left: 8, bottom: 0 }}
+              barCategoryGap="20%"
+              barSize={48}
+            >
+              
+              <CartesianGrid stroke="#f3e5e57a" vertical={false} />
               <YAxis hide />
               <Tooltip
+                formatter={(value, _name, props) => [value, props.payload.name]}
+                labelFormatter={() => ''}
                 contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
               />
               <Bar dataKey="value" radius={[3, 3, 0, 0]}>
@@ -71,10 +73,11 @@ function GenerationCard({ actualToday }: { actualToday: number }) {
 }
 
 // ---- PR% Card ----
-function PRCard() {
+function PRCard({ actual }: { actual: number }) {
+  const targeted = 79.4
   const data = [
-    { name: 'Actual', value: 71.4, fill: '#e17100' },
-    { name: 'Targeted', value: 79.4, fill: '#497d00' },
+    { name: 'Actual', value: actual, fill: '#e17100' },
+    { name: 'Targeted', value: targeted, fill: '#497d00' },
   ]
 
   return (
@@ -91,6 +94,8 @@ function PRCard() {
               <CartesianGrid stroke="#f3e5e57a" vertical={false} />
               <YAxis hide domain={[0, 100]} />
               <Tooltip
+                formatter={(value, _name, props) => [value, props.payload.name]}
+                labelFormatter={() => ''}
                 contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
               />
               <Bar dataKey="value" radius={[3, 3, 0, 0]}>
@@ -99,7 +104,7 @@ function PRCard() {
                   position="top"
                   formatter={(v: unknown) => {
                     const num = Number(v)
-                    return Number.isFinite(num) ? `${num.toLocaleString()}\u00A0%` : ''
+                    return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0%` : ''
                   }}
                   style={{ fontSize: 14, fontWeight: 500, fill: '#02060c' }}
                 />
@@ -120,47 +125,38 @@ function PRCard() {
 }
 
 // ---- CUF% Card ----
-function CUFCard() {
-  const [mode] = useState<'AC' | 'DC'>('AC')
-
-  const values = {
-    AC: { actual: 19.2, targeted: 21.9 },
-    DC: { actual: 16.4, targeted: 18.8 },
-  }
-
+function CUFCard({ actual }: { actual: number }) {
+  const targeted = 21.9
   const data = [
-    { name: 'Actual', value: values[mode].actual, fill: '#e17100' },
-    { name: 'Targeted', value: values[mode].targeted, fill: '#497d00' },
+    { name: 'Actual', value: actual, fill: '#e17100' },
+    { name: 'Targeted', value: targeted, fill: '#497d00' },
   ]
 
   return (
     <Card className="border-[#E5E5E5] shadow-none rounded-xl overflow-hidden">
       <CardContent className="p-0">
         <div className="px-4 pt-2 pb-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[16px] font-semibold text-black-800 uppercase tracking-wider">
-              Capacity Utilisation Factor
-            </p>
-            <div className="flex bg-[#FAFAFA] rounded-md p-0.5 gap-0.5">
-              
-            </div>
-          </div>
+          <p className="text-[16px] font-semibold text-black-800 uppercase tracking-wider">
+            Capacity Utilisation Factor
+          </p>
         </div>
         <div className="h-[180px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 22, right: 8, left: 8, bottom: 0 }} barCategoryGap="20%" barSize={48}>
               <CartesianGrid stroke="#f3e5e57a" vertical={false} />
-              <YAxis hide domain={[0, 30]} />
+              <YAxis hide domain={[0, Math.max(actual, targeted) * 1.3]} />
               <Tooltip
-                contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
-              />
+                  formatter={(value, _name, props) => [value, props.payload.name]}
+                  labelFormatter={() => ''}
+                  contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
+                />
               <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                 <LabelList
                   dataKey="value"
                   position="top"
                   formatter={(v: unknown) => {
                     const num = Number(v)
-                    return Number.isFinite(num) ? `${num.toLocaleString()}\u00A0%` : ''
+                    return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0%` : ''
                   }}
                   style={{ fontSize: 14, fontWeight: 500, fill: '#02060c' }}
                 />
@@ -181,12 +177,20 @@ function CUFCard() {
 }
 
 // ---- Export ----
-export function GenerationCards({ actualToday }: { actualToday: number }) {
+export function GenerationCards({
+  actualToday,
+  performanceRatio,
+  cuf,
+}: {
+  actualToday: number
+  performanceRatio: number
+  cuf: number
+}) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <GenerationCard actualToday={actualToday} />
-      <PRCard />
-      <CUFCard />
+      <PRCard actual={performanceRatio} />
+      <CUFCard actual={cuf} />
     </div>
   )
 }

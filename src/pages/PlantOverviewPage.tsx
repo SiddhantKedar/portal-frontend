@@ -12,7 +12,7 @@ import { GenerationCards } from '@/components/dashboard/GenerationCards'
 import { DatePicker } from '@/components/DatePicker'
 import {
   Area, XAxis, YAxis,
-  CartesianGrid, ResponsiveContainer, Line, ComposedChart
+  CartesianGrid, ResponsiveContainer, Line, ComposedChart, Tooltip
 } from 'recharts'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
@@ -29,6 +29,8 @@ interface PlantOverview {
     energy_today_kwh: number
     frequency_hz: number
     power_factor: number
+    ac_capacity_kw: number
+    dc_capacity_kw: number
   }
   grid: {
     voltage_ab: number
@@ -81,6 +83,21 @@ interface PowerTrendData {
   } | null
 }
 
+interface ElecTrendPoint {
+  time: string
+  voltage_line_ab_v: number
+  voltage_line_bc_v: number
+  voltage_line_ca_v: number
+  current_phase_a: number
+  current_phase_b: number
+  current_phase_c: number
+  grid_frequency_hz: number
+}
+
+interface ElecTrendData {
+  data: ElecTrendPoint[]
+}
+
 // ---- Helpers ----
 
 // Numeric position on a fixed 24hr axis (0–1440), instead of a formatted
@@ -108,6 +125,11 @@ function formatLastUpdated(iso: string) {
 
 function todayString() {
   return new Date().toISOString().split('T')[0]
+}
+
+function formatTime(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 // ---- KPI Card ----
@@ -298,6 +320,137 @@ function PowerTrendCard({
     </>
   )
 }
+
+// Series config — color + label + which Y axis + unit label
+const ELEC_GROUPS = [
+  { key: 'voltage', label: 'Voltage', color: '#e17100' },
+  { key: 'current', label: 'Current', color: '#497d00' },
+  { key: 'frequency', label: 'Frequency', color: '#8A8A8A' },
+]
+
+function ElectricalTrendCard({
+  chartData, trendLoading, selectedDate, setSelectedDate,
+  hidden, onSeriesToggle, expanded, onToggleExpand, height,
+}: {
+  chartData: { time: string; [key: string]: number | string | null }[]
+  trendLoading: boolean
+  selectedDate: string
+  setSelectedDate: (d: string) => void
+  hidden: Set<string>
+  onSeriesToggle: (key: string) => void
+  expanded: boolean
+  onToggleExpand: () => void
+  height: string
+}) {
+  return (
+    <>
+      <CardHeader className="pb-2 px-6 pt-5">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <CardTitle className="text-[18px] font-semibold text-black">Electrical Trend</CardTitle>
+            <p className="text-[12px] text-gray-400 mt-0.5">
+              Voltage · Current · Frequency · {selectedDate === todayString() ? 'Today' : selectedDate}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <DatePicker value={selectedDate} onChange={setSelectedDate} maxDate={new Date()} />
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="h-9 w-9 flex items-center justify-center border border-[#E5E5E5] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
+            >
+              {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Series checkboxes */}
+        <div className="flex items-center gap-4 mt-3">
+          {ELEC_GROUPS.map((g) => (
+            <button key={g.key} type="button" onClick={() => onSeriesToggle(g.key)} className="flex items-center gap-1.5">
+              <span
+                className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
+                style={{
+                  backgroundColor: hidden.has(g.key) ? 'transparent' : g.color,
+                  borderColor: hidden.has(g.key) ? '#D4D4D4' : g.color,
+                }}
+              >
+                {!hidden.has(g.key) && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <span className="text-[11px] text-gray-500">{g.label}</span>
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+
+      <CardContent className="px-0 pb-4">
+        {trendLoading ? (
+          <div className={`${height} flex items-center justify-center`}>
+            <p className="text-[13px] text-gray-400">Loading chart...</p>
+          </div>
+        ) : (
+          <div className={`${height} w-full`}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 10, right: 56, left: 52, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  yAxisId="voltage"
+                  domain={['auto', 'auto']}
+                  tick={{ fontSize: 10, fill: '#6B7280' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={60}
+                  tickFormatter={(v) => `${Number(v).toFixed(1)}kV`}
+                />
+                                <YAxis
+                  yAxisId="current"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: '#6B7280' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  tickFormatter={(v) => `${Number(v).toFixed(0)}A`}
+                />
+                <YAxis yAxisId="freq" hide domain={[45, 55]} />
+                <Tooltip
+                  contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
+                />
+                {!hidden.has('voltage') && (
+                  <>
+                    <Line yAxisId="voltage" type="monotone" dataKey="voltage_ab" name="Voltage AB" stroke="#e17100" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#e17100' }} />
+                    <Line yAxisId="voltage" type="monotone" dataKey="voltage_bc" name="Voltage BC" stroke="#D97706" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#D97706' }} />
+                    <Line yAxisId="voltage" type="monotone" dataKey="voltage_ca" name="Voltage CA" stroke="#b45309" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#b45309' }} />
+                  </>
+                )}
+                {!hidden.has('current') && (
+                  <>
+                    <Line yAxisId="current" type="monotone" dataKey="current_a" name="Current A" stroke="#497d00" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#497d00' }} />
+                    <Line yAxisId="current" type="monotone" dataKey="current_b" name="Current B" stroke="#15803d" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#15803d' }} />
+                    <Line yAxisId="current" type="monotone" dataKey="current_c" name="Current C" stroke="#166534" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#166534' }} />
+                  </>
+                )}
+                {!hidden.has('frequency') && (
+                  <Line yAxisId="freq" type="monotone" dataKey="frequency" name="Frequency" stroke="#8A8A8A" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#8A8A8A' }} />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardContent>
+    </>
+  )
+}
 // ---- Main Page ----
 
 export default function PlantOverviewPage() {
@@ -310,6 +463,22 @@ export default function PlantOverviewPage() {
   const [chartExpanded, setChartExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const { site } = useSite()
+
+  const [elecTrend, setElecTrend] = useState<ElecTrendPoint[]>([])
+  const [elecTrendLoading, setElecTrendLoading] = useState(false)
+  const [elecSelectedDate, setElecSelectedDate] = useState(todayString())
+  const [elecExpanded, setElecExpanded] = useState(false)
+  const [elecHidden, setElecHidden] = useState<Set<string>>(
+  new Set(['current', 'frequency']) // voltage only default
+  )
+
+  function toggleElec(group: string) {
+    setElecHidden((prev) => {
+      const next = new Set(prev)
+      next.has(group) ? next.delete(group) : next.add(group)
+      return next
+    })
+  }
 
   // Fetch overview once
   useEffect(() => {
@@ -345,10 +514,39 @@ export default function PlantOverviewPage() {
     fetchTrend()
   }, [selectedDate])
 
+  useEffect(() => {
+    if (!site?.id) return
+    const fetchElec = async () => {
+      setElecTrendLoading(true)
+      try {
+        const res = await api.get<ElecTrendData>(
+          `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
+        )
+        setElecTrend(res.data.data)
+      } catch {
+        setElecTrend([])
+      } finally {
+        setElecTrendLoading(false)
+      }
+    }
+    fetchElec()
+  }, [site?.id, elecSelectedDate])
+
   const chartData = trend.map((p) => ({
     time: minutesSinceMidnight(p.time),
     power: p.active_power_total_kw > 0 ? p.active_power_total_kw : null,
     irradiation: p.irradiation_inclined_wm2 > 0 ? p.irradiation_inclined_wm2 : null,
+  }))
+
+  const elecChartData = elecTrend.map((p) => ({
+    time: formatTime(p.time),
+    voltage_ab: +(p.voltage_line_ab_v / 1000).toFixed(2),
+    voltage_bc: +(p.voltage_line_bc_v / 1000).toFixed(2),
+    voltage_ca: +(p.voltage_line_ca_v / 1000).toFixed(2),
+    current_a: p.current_phase_a,
+    current_b: p.current_phase_b,
+    current_c: p.current_phase_c,
+    frequency: p.grid_frequency_hz,
   }))
 
   const chartConfig = {
@@ -382,7 +580,7 @@ export default function PlantOverviewPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           title="DC Capacity"
-          value="1,200"
+          value={overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'}
           unit="kW"
           icon={Zap}
           accent
@@ -390,7 +588,7 @@ export default function PlantOverviewPage() {
         />
         <KpiCard
           title="AC Capacity"
-          value="1,050"
+          value={overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'}
           unit="kW"
           icon={Gauge}
           accent
@@ -418,13 +616,6 @@ export default function PlantOverviewPage() {
       {overview?.weather && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#22C55E] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Irradiation</p>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-semibold text-black">{overview.weather.irradiation_inclined_wm2}</span>
-              <span className="text-[12px] text-gray-400">W/m²</span>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#22C55E] px-4 py-3">
             <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Ambient Temp</p>
             <div className="flex items-baseline gap-1">
               <span className="text-[22px] font-semibold text-black">{overview.weather.ambient_temp_c}</span>
@@ -436,6 +627,13 @@ export default function PlantOverviewPage() {
             <div className="flex items-baseline gap-1">
               <span className="text-[22px] font-semibold text-black">{overview.weather.module_temp_c}</span>
               <span className="text-[12px] text-gray-400">°C</span>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#22C55E] px-4 py-3">
+            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Irradiation</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[22px] font-semibold text-black">{overview.weather.irradiation_inclined_wm2}</span>
+              <span className="text-[12px] text-gray-400">W/m²</span>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-4 py-3">
@@ -451,7 +649,11 @@ export default function PlantOverviewPage() {
       )}
 
       {/* Generation Cards */}
-    <GenerationCards actualToday={overview?.plant.energy_today_kwh ?? 0} />
+      <GenerationCards
+        actualToday={overview?.plant.energy_today_kwh ?? 0}
+        performanceRatio={overview?.performance?.performance_ratio_pct ?? 0}
+        cuf={overview?.performance?.cuf_pct ?? 0}
+      />
 
 {/* Power Trend + Grid Table */}
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -518,7 +720,51 @@ export default function PlantOverviewPage() {
         </CardContent>
       </Card>
 
+      
+
     </div>
+
+    {/* Electrical Trend */}
+      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
+        <ElectricalTrendCard
+          chartData={elecChartData}
+          trendLoading={elecTrendLoading}
+          selectedDate={elecSelectedDate}
+          setSelectedDate={setElecSelectedDate}
+          hidden={elecHidden}
+          onSeriesToggle={toggleElec}
+          expanded={elecExpanded}
+          onToggleExpand={() => setElecExpanded(o => !o)}
+          height="h-[280px]"
+        />
+      </Card>
+
+      {/* Electrical Trend Modal */}
+      {elecExpanded && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ backdropFilter: 'blur(6px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setElecExpanded(false)}
+        >
+          <div
+            className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ElectricalTrendCard
+              chartData={elecChartData}
+              trendLoading={elecTrendLoading}
+              selectedDate={elecSelectedDate}
+              setSelectedDate={setElecSelectedDate}
+              hidden={elecHidden}
+              onSeriesToggle={toggleElec}
+              expanded={elecExpanded}
+              onToggleExpand={() => setElecExpanded(false)}
+              height="h-[480px]"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
 
     {/* Modal overlay — renders via portal above everything */}
     {chartExpanded && createPortal(
