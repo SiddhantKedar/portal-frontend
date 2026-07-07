@@ -65,6 +65,31 @@ export function AppSidebar() {
       </SidebarHeader>
 
       {/* Nav */}
+
+       {/* Installer only section */}
+        {user?.role === 'INSTALLER' && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
+              Installer
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to="/installer"
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <Building2 size={16} />
+                      <span className="text-[13px]">Fleet Overview</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
@@ -217,30 +242,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
 
-        {/* Installer only section */}
-              {user?.role === 'INSTALLER' && (
-                <SidebarGroup>
-                  <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
-                    Installer
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <NavLink
-                            to="/installer"
-                            className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                          >
-                            <Building2 size={16} />
-                            <span className="text-[13px]">Fleet Overview</span>
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              )}
-
+       
         {/* Admin only section */}
         {user?.role === 'ADMIN' && (
           <SidebarGroup>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Zap, TrendingUp, Activity,  Sun, Thermometer, Clock, Maximize2, Minimize2, Leaf,  RefreshCw, Power, Cpu } from 'lucide-react'
+import { Sun, Thermometer, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ChartContainer,
@@ -11,7 +11,8 @@ import { GenerationCards } from '@/components/dashboard/GenerationCards'
 import { DatePicker } from '@/components/DatePicker'
 import {
   Area, XAxis, YAxis,
-  CartesianGrid, ResponsiveContainer, Line, ComposedChart, Tooltip, BarChart, Bar, LabelList
+  CartesianGrid, ResponsiveContainer, Line, ComposedChart, Tooltip, BarChart, Bar, LabelList,
+  RadialBarChart, RadialBar, PolarAngleAxis
 } from 'recharts'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
@@ -151,66 +152,56 @@ function formatDateTick(dateStr: string) {
   return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-// ---- KPI Card ----
+// ---- Power Gauge ----
+// Recharts RadialBarChart, 270° (3/4) sweep, showing Active Power as
+// a % of AC capacity. Value itself is displayed above, not inside it.
 
-function KpiCard({
-  title, value, unit, icon: Icon, accent = false, footer,
-}: {
-  title: string
-  value: string | number
-  unit: string
-  icon: React.ElementType
-  accent?: boolean
-  footer?: string
-}) {
+function PowerGauge({ value, capacity }: { value: number; capacity: number }) {
+  const pct = capacity > 0 ? Math.min(100, (value / capacity) * 100) : 0
+  const data = [{ name: 'power', value: pct }]
   return (
-    <div className={`bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] px-3 py-2.5 ${accent ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
-      <div className="flex items-start justify-between mb-2.5">
-        <p className="text-[14px] uppercase tracking-wider text-black-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
-          <Icon size={13} className={accent ? 'text-amber-600' : 'text-gray-400'} />
-        </div>
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-black tracking-tight leading-none">
-          {value}
-        </span>
-        <span className="text-[12px] text-black-400">{unit}</span>
-      </div>
-      {footer && (
-        <div className="flex items-center gap-1.5 mt-1.5">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
-          <span className="text-[11px] text-green-700">{footer}</span>
-        </div>
-      )}
+    <div className="w-[170px] h-[130px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadialBarChart
+          data={data}
+          startAngle={225}
+          endAngle={-45}
+          innerRadius="70%"
+          outerRadius="100%"
+          barSize={14}
+        >
+          <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+          <RadialBar
+            dataKey="value"
+            cornerRadius={7}
+            fill="#e17100"
+            background={{ fill: 'rgba(0,0,0,0.08)' }}
+          />
+        </RadialBarChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
+// No card/box — plain inline icon + label + status, matches the
+// understated feel of the sections below instead of standing out as a tile.
 function StatusChip({
   label, value, healthy, icon: Icon,
 }: {
   label: string
   value: string
-  healthy: boolean | null // true=green, false=red, null=unknown/gray
+  healthy: boolean | null // true=green, false=red, null=unknown
   icon: React.ElementType
 }) {
-  const accent = healthy === null ? 'border-l-[#D4D4D4]' : healthy ? 'border-l-green-500' : 'border-l-red-500'
-  const dotColor = healthy === null ? 'bg-gray-300' : healthy ? 'bg-green-500' : 'bg-red-500'
-  const textColor = healthy === null ? 'text-gray-500' : healthy ? 'text-green-700' : 'text-red-600'
+  const dotColor = healthy === null ? 'bg-black' : healthy ? 'bg-green-500' : 'bg-red-500'
+  const textColor = healthy === null ? 'text-black' : healthy ? 'text-green-700' : 'text-red-600'
 
   return (
-    <div className={`flex items-center gap-3 bg-white border border-[#E5E5E5] border-l-[3px] ${accent} rounded-lg px-3.5 py-2.5`}>
-      <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[#FAFAFA] text-gray-400 shrink-0">
-        <Icon size={16} />
-      </div>
-      <div>
-        <p className="text-[10px] uppercase tracking-wider text-gray-400 font-medium leading-none mb-1">{label}</p>
-        <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
-          <span className={`text-[14px] font-semibold leading-none ${textColor}`}>{value}</span>
-        </div>
-      </div>
+    <div className="flex items-center gap-2">
+      <Icon size={15} className="text-black" />
+      <span className="text-[11px] uppercase tracking-wider text-black font-medium">{label}</span>
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+      <span className={`text-[13px] font-semibold ${textColor}`}>{value}</span>
     </div>
   )
 }
@@ -739,140 +730,133 @@ export default function PlantOverviewPage() {
     <div className="max-w-6xl mx-auto space-y-6 px-2 md:px-0">
 
     {/* Page Header */}
-    <div>
-      <h1 className="text-[20px] font-semibold text-black tracking-tight">
-        Plant Overview
-      </h1>
-      <p className="text-[13px] text-gray-500 mt-0.5">
-        {overview?.site} <span className="text-gray-300">·</span> {overview?.customer ?? '—'}
-      </p>
-      <p className="text-[12px] text-gray-400 mt-1">
-        AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW
-        <span className="mx-1 text-gray-300">/</span>
-        DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW
-      </p>
+    <div className="flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <p className="text-[11px] uppercase tracking-wider text-black font-medium">Plant Overview</p>
+        <h1 className="text-[20px] font-semibold text-black tracking-tight mt-0.5">
+          {overview?.site ?? '—'}
+        </h1>
+        <p className="text-[13px] text-black mt-0.5">
+          {overview?.customer ?? '—'} <span className="mx-1">·</span>
+          AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW / DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW
+        </p>
+      </div>
+
+      <div className="flex flex-col items-end gap-2">
+        <button
+          type="button"
+          onClick={() => setRefreshTick((t) => t + 1)}
+          className="h-9 px-3 flex items-center gap-1.5 border border-black/30 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[12px] font-medium"
+        >
+          <RefreshCw size={13} />
+          Refresh
+        </button>
+        <p className="text-[12px] text-black flex items-center gap-1.5">
+          <Clock size={12} />
+          Last updated {overview?.last_updated ? formatLastUpdated(overview.last_updated) : '—'}
+        </p>
+        <div className="flex flex-wrap items-center justify-end gap-4">
+          <StatusChip
+            label="Breaker"
+            value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'UNKNOWN'}
+            healthy={overview?.breaker_status ? overview.breaker_status === 'on' : null}
+            icon={Power}
+          />
+          <StatusChip
+            label="Inverters"
+            value={`${overview?.device_summary.online ?? 0}/${overview?.device_summary.total ?? 0} Online`}
+            healthy={overview ? overview.device_summary.online === overview.device_summary.total : null}
+            icon={Cpu}
+          />
+        </div>
+      </div>
     </div>
 
-    {/* Breaker/Inverter status (left) + Refresh (right) */}
-<div className="flex items-center justify-between flex-wrap gap-4">
-  <div className="flex flex-wrap items-center gap-3">
-    <StatusChip
-      label="Breaker"
-      value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'UNKNOWN'}
-      healthy={overview?.breaker_status ? overview.breaker_status === 'on' : null}
-      icon={Power}
-    />
-    <StatusChip
-      label="Inverters"
-      value={`${overview?.device_summary.online ?? 0}/${overview?.device_summary.total ?? 0} Online`}
-      healthy={overview ? overview.device_summary.online === overview.device_summary.total : null}
-      icon={Cpu}
-    />
-  </div>
+    {/* Hero: Active Power (above gauge) + Gauge + Energy values */}
+    <div className="pt-5 border-t border-black/10">
+      <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-8 items-center">
 
-  <div className="flex flex-col items-end gap-1.5">
-    <button
-      type="button"
-      onClick={() => setRefreshTick((t) => t + 1)}
-      className="h-9 px-3 flex items-center gap-1.5 border border-[#E5E5E5] rounded-lg text-gray-500 hover:text-black hover:border-[#D4D4D4] transition-colors text-[12px] font-medium"
-    >
-      <RefreshCw size={13} />
-      Refresh
-    </button>
-    <p className="text-[13px] text-black-400 flex items-center gap-1">
-      <Clock size={11} />
-      Last updated {overview?.last_updated ? formatLastUpdated(overview.last_updated) : '—'}
-    </p>
-  </div>
-</div>
+        {/* Active Power readout + gauge */}
+        <div className="flex flex-col items-center">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[28px] font-semibold text-black leading-none">
+              {overview?.plant.active_power_kw ?? '—'}
+            </span>
+            <span className="text-[13px] font-medium text-black">kW</span>
+          </div>
+          <p className="text-[12px] font-medium text-black mt-1 mb-2">Active Power</p>
+          <PowerGauge
+            value={overview?.plant.active_power_kw ?? 0}
+            capacity={overview?.plant.ac_capacity_kw ?? 1}
+          />
+          <p className="text-[12px] text-black mt-1">
+            {overview && overview.plant.ac_capacity_kw
+              ? Math.round((overview.plant.active_power_kw / overview.plant.ac_capacity_kw) * 100)
+              : 0}% of {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW AC
+          </p>
+        </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          title="Active Power"
-          value={overview?.plant.active_power_kw ?? '—'}
-          unit="kW"
-          icon={Activity}
-          accent
-          footer="Live reading"
-        />
-        <KpiCard
-          title="Energy Today"
-          value={overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
-          unit="kWh"
-          icon={TrendingUp}
-          accent
-          footer="Today so far"
-        />
-        <KpiCard
-          title="Energy Total"
-          value={overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
-          unit="kWh"
-          icon={Zap}
-          accent
-          footer="Lifetime"
-        />
-        <KpiCard
-          title="CO₂ Avoided"
-          value={overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
-          unit="kg"
-          icon={Leaf}
-          accent
-          footer="Today so far"
-        />
+        {/* Energy Today / Energy Total / CO2 Avoided */}
+        <div>
+          <div className="flex justify-between items-baseline py-2.5 border-b border-black/10">
+            <span className="text-[13px] font-medium text-black">Energy Today</span>
+            <span className="font-mono text-[18px] font-semibold text-black">
+              {overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
+              <span className="text-[11px] font-medium ml-1">kWh</span>
+            </span>
+          </div>
+          <div className="flex justify-between items-baseline py-2.5 border-b border-black/10">
+            <span className="text-[13px] font-medium text-black">Energy Total</span>
+            <span className="font-mono text-[18px] font-semibold text-black">
+              {overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
+              <span className="text-[11px] font-medium ml-1">kWh</span>
+            </span>
+          </div>
+          <div className="flex justify-between items-baseline py-2.5">
+            <span className="text-[13px] font-medium text-black">CO₂ Avoided Today</span>
+            <span className="font-mono text-[18px] font-semibold text-black">
+              {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
+              <span className="text-[11px] font-medium ml-1">kg</span>
+            </span>
+          </div>
+        </div>
       </div>
+    </div>
 
       {/* Weather Strip */}
       {overview?.weather && (
-        <div className="grid grid-cols-3 gap-4">
-          {/* Irradiance */}
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-3 py-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[15px] uppercase tracking-wider text-black-400 font-semibold">Irradiance</p>
-              <div className="w-6 h-6 rounded-md bg-amber-600/10 flex items-center justify-center">
-                <Sun size={12} className="text-amber-600" />
-              </div>
+        <div className="flex pt-4 border-t border-black/10">
+          <div className="flex-1 pr-4">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Sun size={13} className="text-amber-600" />
+              <p className="text-[16px] uppercase tracking-wider text-black font-bold">Irradiance</p>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-bold text-black">{overview.weather.irradiation_inclined_wm2}</span>
-              <span className="text-[12px] text-black-400">W/m²</span>
-            </div>
-            <p className="text-[11px] text-green-700 mt-1">Inclined plane · live</p>
+            <p className="font-mono text-[25px] pl-8 font-semibold text-black">
+              {overview.weather.irradiation_inclined_wm2} <span className="text-[13px] font-bold">W/m²</span>
+            </p>
           </div>
 
-          {/* Ambient Temp */}
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-3 py-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[15px] uppercase tracking-wider text-black-400 font-semibold">Ambient Temp</p>
-              <div className="w-6 h-6 rounded-md bg-amber-600/10 flex items-center justify-center">
-                <Thermometer size={12} className="text-amber-600" />
-              </div>
+          <div className="flex-1 px-4 border-l border-black/10">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Thermometer size={13} className="text-amber-600" />
+              <p className="text-[16px] uppercase tracking-wider text-black font-bold">Ambient Temp</p>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-bold text-black">{overview.weather.ambient_temp_c}</span>
-              <span className="text-[12px] text-black-400">°C</span>
-            </div>
-            <p className="text-[11px] text-green-700 mt-1">Air temperature</p>
+            <p className="font-mono text-[25px] pl-8 font-semibold text-black">
+              {overview.weather.ambient_temp_c} <span className="text-[13px] font-bold">°C</span>
+            </p>
           </div>
 
-          {/* Module Temp */}
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-3 py-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[15px] uppercase tracking-wider text-black-400 font-semibold">Module Temp</p>
-              <div className="w-6 h-6 rounded-md bg-amber-600/10 flex items-center justify-center">
-                <Thermometer size={12} className="text-amber-600" />
-              </div>
+          <div className="flex-1 pl-4 border-l border-black/10">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Thermometer size={13} className="text-amber-600" />
+              <p className="text-[16px] uppercase tracking-wider text-black font-bold">Module Temp</p>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-bold text-black">{overview.weather.module_temp_c}</span>
-              <span className="text-[12px] text-black-400">°C</span>
-            </div>
+            <p className="font-mono text-[25px] pl-8 font-semibold text-black">
+              {overview.weather.module_temp_c} <span className="text-[13px] font-bold">°C</span>
+            </p>
             {tempDelta && (
-              <p className="text-[11px] mt-1">
-                <span className={`font-semibold ${Number(tempDelta) > 10 ? 'text-amber-600' : 'text-green-700'}`}>
-                  +{tempDelta}°C
-                </span>
-                <span className="text-green-700"> above ambient</span>
+              <p className="text-[11px] pl-8 font-medium mt-1 text-black">
+                +{tempDelta}°C above ambient
               </p>
             )}
           </div>
