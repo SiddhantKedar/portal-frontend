@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import {
   DayPicker,
@@ -87,12 +85,13 @@ function Calendar({
             : "flex items-center gap-1 rounded-(--cell-radius) text-sm [&>svg]:size-3.5 [&>svg]:text-muted-foreground",
           defaultClassNames.caption_label
         ),
-        week: cn("mt-2 flex w-full", defaultClassNames.week),
+        month_grid: cn("w-full border-collapse", defaultClassNames.month_grid),
         weekdays: cn("flex", defaultClassNames.weekdays),
-          weekday: cn(
-            "text-muted-foreground flex-1 select-none rounded-(--cell-radius) text-[0.8rem] font-normal",
-            defaultClassNames.weekday
-          ),
+        weekday: cn(
+          "flex-1 rounded-(--cell-radius) text-[0.8rem] font-normal text-muted-foreground select-none",
+          defaultClassNames.weekday
+        ),
+        week: cn("mt-2 flex w-full", defaultClassNames.week),
         week_number_header: cn(
           "w-(--cell-size) select-none",
           defaultClassNames.week_number_header

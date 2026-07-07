@@ -16,6 +16,7 @@ import NotFoundPage from './pages/NotFoundPage'
 // Test pages
 import CustomerOverviewPage from './pages/TEMP-CustomerOverviewPage'
 import PlantOverviewPage1 from './pages/TEMP1-PlantOverviewPage'
+import PlantOverviewPageV2 from './pages/TEMP2-PlantOverviewPage'
 
 function PrivateRoute() {
   const { user, isLoading } = useAuth()
@@ -60,6 +61,7 @@ export default function App() {
 
             <Route path="/customers/:customerId" element={<CustomerOverviewPage />} />
             <Route path="/plant1" element={<PlantOverviewPage1 />} />
+            <Route path="/plant2" element={<PlantOverviewPageV2 />} />
 
             
           </Route>
