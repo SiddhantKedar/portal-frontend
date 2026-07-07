@@ -869,8 +869,6 @@ export default function PlantOverviewPage() {
               <p className={T.eyebrow}>Plant Overview</p>
               <h1 className={`${T.siteH1} mt-2 break-words`}>{overview?.site ?? '—'}</h1>
               <p className={`${T.body} mt-1`}>
-                {overview?.customer ?? '—'}
-                <span className="mx-2 text-black">·</span>
                 <span className="tabular-nums whitespace-nowrap">AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW</span>
                 <span className="mx-1 text-black">/</span>
                 <span className="tabular-nums whitespace-nowrap">DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW</span>

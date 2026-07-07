@@ -22,7 +22,6 @@ import { useSite } from '@/context/SiteContext'
 
 interface PlantOverview {
   site: string
-  customer: string
   last_updated: string
   plant: {
     active_power_kw: number
@@ -743,9 +742,6 @@ export default function PlantOverviewPage() {
       <h1 className="text-[20px] font-semibold text-black tracking-tight">
         Plant Overview
       </h1>
-      <p className="text-[13px] text-gray-500 mt-0.5">
-        {overview?.site} <span className="text-gray-300">·</span> {overview?.customer ?? '—'}
-      </p>
       <p className="text-[12px] text-gray-400 mt-1">
         AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW
         <span className="mx-1 text-gray-300">/</span>
