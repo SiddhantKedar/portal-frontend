@@ -13,6 +13,11 @@ import InstallerOverviewPage from './pages/InstallerOverviewPage'
 import WeatherPage from './pages/WeatherPage'
 import NotFoundPage from './pages/NotFoundPage'
 
+// Test pages
+import CustomerOverviewPage from './pages/TEMP-CustomerOverviewPage'
+import PlantOverviewPage1 from './pages/TEMP1-PlantOverviewPage'
+import PlantOverviewPageV2 from './pages/TEMP2-PlantOverviewPage'
+
 function PrivateRoute() {
   const { user, isLoading } = useAuth()
   const { siteLoading, siteError } = useSite()
@@ -53,6 +58,12 @@ export default function App() {
             <Route path="/installer" element={<InstallerOverviewPage />} />
             <Route path="/weather" element={<WeatherPage />} />
             <Route path="*" element={<NotFoundPage />} />
+
+            <Route path="/customers/:customerId" element={<CustomerOverviewPage />} />
+            <Route path="/plant1" element={<PlantOverviewPage1 />} />
+            <Route path="/plant2" element={<PlantOverviewPageV2 />} />
+
+            
           </Route>
         </Route>
       </Routes>

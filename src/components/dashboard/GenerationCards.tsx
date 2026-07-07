@@ -1,178 +1,87 @@
-import { Card, CardContent } from '@/components/ui/card'
-import { BarChart, Bar, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid } from 'recharts'
+import { BarChart, Bar, Cell, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid } from 'recharts'
 
-// ---- Legend ----
-function Legend({ items }: { items: { color: string; label: string }[] }) {
+const COLORS = {
+  actual: '#e17100',
+  targeted: '#497d00',
+}
+
+// ---- Inline legend (sits next to the card title, not in a bordered row) ----
+function InlineLegend() {
   return (
-    <div className="flex items-center gap-3 px-4 py-2 border-t border-[#F1F1F1]">
-      {items.map((item) => (
-        <div key={item.label} className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: item.color }} />
-          <span className="text-[10px] text-gray-400">{item.label}</span>
-        </div>
-      ))}
+    <div className="flex items-center gap-4">
+      <div className="flex items-center gap-1.5">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS.actual }} />
+        <span className="text-[12px] text-black font-medium">Actual</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS.targeted }} />
+        <span className="text-[12px] text-black font-medium">Targeted</span>
+      </div>
     </div>
   )
 }
 
-// ---- Generation Card ----
-function GenerationCard({ actualToday }: { actualToday: number }) {
+// ---- One card, three configs ----
+function ComparisonCard({
+  title, actual, targeted, formatValue, domainMax,
+}: {
+  title: string
+  actual: number
+  targeted: number
+  formatValue: (n: number) => string
+  domainMax?: number
+}) {
   const data = [
-    { name: 'Actual', value: actualToday, fill: '#e17100' },
-    { name: 'Targeted', value: 5500, fill: '#497d00' },
+    { name: 'Actual', value: actual, fill: COLORS.actual },
+    { name: 'Targeted', value: targeted, fill: COLORS.targeted },
   ]
 
   return (
-    <Card className="border-[#E5E5E5] shadow-none rounded-xl overflow-hidden">
-      <CardContent className="p-0">
-        <div className="px-4 pt-2 pb-4">
-          <p className="text-[16px] font-semibold text-black-800 uppercase tracking-wider">
-            Generation
-          </p>
-        </div>
-        <div className="h-[180px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={data}
-              margin={{ top: 22, right: 8, left: 8, bottom: 0 }}
-              barCategoryGap="20%"
-              barSize={48}
-            >
-              
-              <CartesianGrid stroke="#f3e5e57a" vertical={false} />
-              <YAxis hide />
-              <Tooltip
-                formatter={(value, _name, props) => [value, props.payload.name]}
-                labelFormatter={() => ''}
-                contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+        <p className="text-[15px] font-semibold text-black tracking-tight">{title}</p>
+        <InlineLegend />
+      </div>
+      <div className="h-[200px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={data}
+            margin={{ top: 28, right: 12, left: 12, bottom: 0 }}
+            barCategoryGap="20%"
+            barSize={56}
+          >
+            <CartesianGrid stroke="#F1F1F1" vertical={false} />
+            <YAxis hide domain={[0, domainMax ?? 'auto']} />
+            <Tooltip
+              formatter={(value, _name, props) => [formatValue(Number(value)), props.payload.name]}
+              labelFormatter={() => ''}
+              contentStyle={{
+                fontSize: '13px',
+                color: '#000',
+                border: '1px solid #000',
+                borderRadius: '8px',
+                boxShadow: 'none',
+                fontWeight: 500,
+              }}
+            />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              {data.map((entry, index) => (
+                <Cell key={index} fill={entry.fill} />
+              ))}
+              <LabelList
+                dataKey="value"
+                position="top"
+                formatter={(v: unknown) => {
+                  const num = Number(v)
+                  return Number.isFinite(num) ? formatValue(num) : ''
+                }}
+                style={{ fontSize: 15, fontWeight: 700, fill: '#000' }}
               />
-              <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                <LabelList
-                  dataKey="value"
-                  position="top"
-                  formatter={(v: unknown) => {
-                    const num = Number(v)
-                    return Number.isFinite(num) ? `${num.toLocaleString()}\u00A0kWh` : ''
-                  }}
-                  style={{ fontSize: 14, fontWeight: 500, fill: '#02060c' }}
-                />
-                {data.map((entry, index) => (
-                  <rect key={index} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <Legend items={[
-          { color: '#e17100', label: 'Actual' },
-          { color: '#497d00', label: 'Targeted' },
-        ]} />
-      </CardContent>
-    </Card>
-  )
-}
-
-// ---- PR% Card ----
-function PRCard({ actual }: { actual: number }) {
-  const targeted = 79.4
-  const data = [
-    { name: 'Actual', value: actual, fill: '#e17100' },
-    { name: 'Targeted', value: targeted, fill: '#497d00' },
-  ]
-
-  return (
-    <Card className="border-[#E5E5E5] shadow-none rounded-xl overflow-hidden">
-      <CardContent className="p-0">
-        <div className="px-4 pt-2 pb-4">
-          <p className="text-[16px] font-semibold text-black-800 uppercase tracking-wider">
-            Performance Ratio
-          </p>
-        </div>
-        <div className="h-[180px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 22, right: 8, left: 8, bottom: 0 }} barCategoryGap="20%" barSize={48}>
-              <CartesianGrid stroke="#f3e5e57a" vertical={false} />
-              <YAxis hide domain={[0, 100]} />
-              <Tooltip
-                formatter={(value, _name, props) => [value, props.payload.name]}
-                labelFormatter={() => ''}
-                contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
-              />
-              <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                <LabelList
-                  dataKey="value"
-                  position="top"
-                  formatter={(v: unknown) => {
-                    const num = Number(v)
-                    return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0%` : ''
-                  }}
-                  style={{ fontSize: 14, fontWeight: 500, fill: '#02060c' }}
-                />
-                {data.map((entry, index) => (
-                  <rect key={index} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <Legend items={[
-          { color: '#e17100', label: 'Actual' },
-          { color: '#497d00', label: 'Targeted' },
-        ]} />
-      </CardContent>
-    </Card>
-  )
-}
-
-// ---- CUF% Card ----
-function CUFCard({ actual }: { actual: number }) {
-  const targeted = 21.9
-  const data = [
-    { name: 'Actual', value: actual, fill: '#e17100' },
-    { name: 'Targeted', value: targeted, fill: '#497d00' },
-  ]
-
-  return (
-    <Card className="border-[#E5E5E5] shadow-none rounded-xl overflow-hidden">
-      <CardContent className="p-0">
-        <div className="px-4 pt-2 pb-4">
-          <p className="text-[16px] font-semibold text-black-800 uppercase tracking-wider">
-            Capacity Utilisation Factor
-          </p>
-        </div>
-        <div className="h-[180px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 22, right: 8, left: 8, bottom: 0 }} barCategoryGap="20%" barSize={48}>
-              <CartesianGrid stroke="#f3e5e57a" vertical={false} />
-              <YAxis hide domain={[0, Math.max(actual, targeted) * 1.3]} />
-              <Tooltip
-                  formatter={(value, _name, props) => [value, props.payload.name]}
-                  labelFormatter={() => ''}
-                  contentStyle={{ fontSize: '11px', border: '0.5px solid #E5E5E5', borderRadius: '8px', boxShadow: 'none' }}
-                />
-              <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                <LabelList
-                  dataKey="value"
-                  position="top"
-                  formatter={(v: unknown) => {
-                    const num = Number(v)
-                    return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0%` : ''
-                  }}
-                  style={{ fontSize: 14, fontWeight: 500, fill: '#02060c' }}
-                />
-                {data.map((entry, index) => (
-                  <rect key={index} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <Legend items={[
-          { color: '#e17100', label: 'Actual' },
-          { color: '#497d00', label: 'Targeted' },
-        ]} />
-      </CardContent>
-    </Card>
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   )
 }
 
@@ -187,10 +96,33 @@ export function GenerationCards({
   cuf: number
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <GenerationCard actualToday={actualToday} />
-      <PRCard actual={performanceRatio} />
-      <CUFCard actual={cuf} />
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-0 md:divide-x md:divide-black/15">
+      <div className="md:pr-8">
+        <ComparisonCard
+          title="Generation"
+          actual={actualToday}
+          targeted={5500}
+          formatValue={(n) => `${n.toLocaleString()}\u00A0kWh`}
+        />
+      </div>
+      <div className="md:px-8">
+        <ComparisonCard
+          title="Performance Ratio"
+          actual={performanceRatio}
+          targeted={79.4}
+          formatValue={(n) => `${n.toFixed(1)}%`}
+          domainMax={100}
+        />
+      </div>
+      <div className="md:pl-8">
+        <ComparisonCard
+          title="Capacity Utilisation Factor"
+          actual={cuf}
+          targeted={21.9}
+          formatValue={(n) => `${n.toFixed(1)}%`}
+          domainMax={Math.max(cuf, 21.9) * 1.3}
+        />
+      </div>
     </div>
   )
 }

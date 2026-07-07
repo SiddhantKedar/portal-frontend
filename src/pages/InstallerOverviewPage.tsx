@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Zap, TrendingUp, Building2, Cpu, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import api from '@/api/axios'
+import {useNavigate} from 'react-router-dom'
 
 // ---- Types ----
 
@@ -109,13 +110,15 @@ function CustomerCard({ customer }: { customer: CustomerSummary }) {
   const totalPower = customer.sites.reduce((sum, s) => sum + s.active_power_kw, 0)
   const totalEnergy = customer.sites.reduce((sum, s) => sum + s.energy_today_kwh, 0)
   const sitesOnline = customer.sites.filter((s) => s.meter_online).length
+  const navigate = useNavigate()
 
   return (
     <Card className="border-[#E5E5E5] shadow-none rounded-xl">
       <CardHeader className="pb-0 px-6 pt-5">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <CardTitle className="text-[18px] font-semibold text-black">
+            <CardTitle className="text-[18px] font-semibold text-black"onClick={() => navigate(`/customers/${customer.customer_id}`, { state: { customer } })}
+  >
               {customer.customer_name}
             </CardTitle>
             <p className="text-[12px] text-gray-400 mt-0.5">

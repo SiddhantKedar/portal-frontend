@@ -1,22 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Zap, TrendingUp, Activity,  Sun, Thermometer, Clock, Maximize2, Minimize2, Leaf,  RefreshCw, Power, Cpu } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+TrendingUp, Sun, Thermometer, Clock, Maximize2, Minimize2, Leaf,
+  RefreshCw, Power, Cpu, Wind,
+} from 'lucide-react'
+import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart'
-import { GenerationCards } from '@/components/dashboard/GenerationCards'
 import { DatePicker } from '@/components/DatePicker'
 import {
   Area, XAxis, YAxis,
-  CartesianGrid, ResponsiveContainer, Line, ComposedChart, Tooltip, BarChart, Bar, LabelList
+  CartesianGrid, ResponsiveContainer, Line, ComposedChart, Tooltip, BarChart, Bar, LabelList,
 } from 'recharts'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
-
-
 
 // ---- Types ----
 
@@ -60,7 +60,6 @@ interface PlantOverview {
     module_temp_c: number
     status: string
   } | null
-
   performance: {
     performance_ratio_pct: number
     cuf_pct: number
@@ -113,9 +112,6 @@ interface DailyEnergyData {
 
 // ---- Helpers ----
 
-// Numeric position on a fixed 24hr axis (0–1440), instead of a formatted
-// string label — lets Recharts use a real numeric domain so the axis
-// always spans the full day, even if actual data only covers part of it.
 function minutesSinceMidnight(iso: string) {
   const d = new Date(iso)
   return d.getHours() * 60 + d.getMinutes()
@@ -145,77 +141,207 @@ function formatTime(iso: string) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-// Manual parse avoids UTC/local off-by-one shift on plain YYYY-MM-DD strings
 function formatDateTick(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-// ---- KPI Card ----
+// ---- New: Radial Gauge (270° arc) for the hero Active Power visual ----
 
-function KpiCard({
-  title, value, unit, icon: Icon, accent = false, footer,
+function RadialGauge({
+  value, max, unit, color = '#e17100', label,
 }: {
-  title: string
-  value: string | number
+  value: number
+  max: number
   unit: string
-  icon: React.ElementType
-  accent?: boolean
-  footer?: string
+  color?: string
+  label?: string
 }) {
+  const pct = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0
+  const radius = 92
+  const strokeWidth = 14
+  const circumference = 2 * Math.PI * radius
+  const arcFraction = 0.75 // 270° of the full circle
+  const arcLength = circumference * arcFraction
+  const progressLength = arcLength * pct
+
   return (
-    <div className={`bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] px-3 py-2.5 ${accent ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
-      <div className="flex items-start justify-between mb-2.5">
-        <p className="text-[14px] uppercase tracking-wider text-black-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
-          <Icon size={13} className={accent ? 'text-amber-600' : 'text-gray-400'} />
+    <div className="relative flex items-center justify-center" style={{ width: 230, height: 230 }}>
+      <svg width="230" height="230" viewBox="0 0 230 230" style={{ transform: 'rotate(135deg)' }}>
+        {/* Background track */}
+        <circle
+          cx="115" cy="115" r={radius}
+          fill="none"
+          stroke="#F1F1F1"
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${arcLength} ${circumference}`}
+          strokeLinecap="round"
+        />
+        {/* Progress */}
+        <circle
+          cx="115" cy="115" r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${progressLength} ${circumference}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.7s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        {label && (
+          <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium mb-1">
+            {label}
+          </p>
+        )}
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[44px] font-semibold text-black tracking-tight leading-none">
+            {typeof value === 'number' ? value.toLocaleString() : value}
+          </span>
+        </div>
+        <span className="text-[12px] text-gray-500 mt-1">{unit}</span>
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">
+            {(pct * 100).toFixed(0)}% of {max.toLocaleString()} kW
+          </span>
         </div>
       </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-black tracking-tight leading-none">
-          {value}
-        </span>
-        <span className="text-[12px] text-black-400">{unit}</span>
-      </div>
-      {footer && (
-        <div className="flex items-center gap-1.5 mt-1.5">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
-          <span className="text-[11px] text-green-700">{footer}</span>
-        </div>
-      )}
     </div>
   )
 }
 
-function StatusChip({
+// ---- New: Semi-circular gauge for PR / CUF ----
+
+function SemiGauge({
+  value, label, tone = 'accent',
+}: {
+  value: number
+  label: string
+  tone?: 'accent' | 'olive'
+}) {
+  const pct = Math.min(Math.max(value / 100, 0), 1)
+  const color = tone === 'accent' ? '#e17100' : '#497d00'
+  const radius = 62
+  const circumference = Math.PI * radius
+  const dashOffset = circumference * (1 - pct)
+
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="relative" style={{ width: 158, height: 88 }}>
+        <svg width="158" height="88" viewBox="0 0 158 88">
+          <path
+            d="M 17 80 A 62 62 0 0 1 141 80"
+            fill="none"
+            stroke="#F1F1F1"
+            strokeWidth={10}
+            strokeLinecap="round"
+          />
+          <path
+            d="M 17 80 A 62 62 0 0 1 141 80"
+            fill="none"
+            stroke={color}
+            strokeWidth={10}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            style={{ transition: 'stroke-dashoffset 0.7s ease' }}
+          />
+        </svg>
+        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
+          <span className="text-[26px] font-semibold text-black leading-none tracking-tight">
+            {value.toFixed(1)}
+          </span>
+          <span className="text-[10px] text-gray-400 mt-0.5">%</span>
+        </div>
+      </div>
+      <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500 font-medium">{label}</p>
+    </div>
+  )
+}
+
+// ---- New: Inline stat (used inside hero and elsewhere) ----
+
+function InlineStat({
+  label, value, unit, tone,
+}: {
+  label: string
+  value: string | number
+  unit?: string
+  tone?: 'default' | 'accent' | 'olive'
+}) {
+  const valueColor =
+    tone === 'accent' ? 'text-[#e17100]' :
+    tone === 'olive' ? 'text-[#497d00]' : 'text-black'
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium">{label}</p>
+      <div className="flex items-baseline gap-1">
+        <span className={`text-[22px] font-semibold tracking-tight leading-none ${valueColor}`}>
+          {value}
+        </span>
+        {unit && <span className="text-[11px] text-gray-400">{unit}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ---- New: Status pill (used inline in hero) ----
+
+function StatusPill({
   label, value, healthy, icon: Icon,
 }: {
   label: string
   value: string
-  healthy: boolean | null // true=green, false=red, null=unknown/gray
+  healthy: boolean | null
   icon: React.ElementType
 }) {
-  const accent = healthy === null ? 'border-l-[#D4D4D4]' : healthy ? 'border-l-green-500' : 'border-l-red-500'
-  const dotColor = healthy === null ? 'bg-gray-300' : healthy ? 'bg-green-500' : 'bg-red-500'
-  const textColor = healthy === null ? 'text-gray-500' : healthy ? 'text-green-700' : 'text-red-600'
-
+  const dot =
+    healthy === null ? 'bg-gray-300' :
+    healthy ? 'bg-green-500' : 'bg-red-500'
+  const valueTone =
+    healthy === null ? 'text-gray-500' :
+    healthy ? 'text-green-700' : 'text-red-600'
   return (
-    <div className={`flex items-center gap-3 bg-white border border-[#E5E5E5] border-l-[3px] ${accent} rounded-lg px-3.5 py-2.5`}>
-      <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[#FAFAFA] text-gray-400 shrink-0">
-        <Icon size={16} />
-      </div>
-      <div>
-        <p className="text-[10px] uppercase tracking-wider text-gray-400 font-medium leading-none mb-1">{label}</p>
-        <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
-          <span className={`text-[14px] font-semibold leading-none ${textColor}`}>{value}</span>
+    <div className="inline-flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full bg-white border border-[#EDEDED]">
+      <span className="w-6 h-6 rounded-full bg-[#FAFAFA] flex items-center justify-center text-gray-400">
+        <Icon size={12} />
+      </span>
+      <span className="text-[10px] uppercase tracking-widest text-gray-400 font-medium">{label}</span>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+      <span className={`text-[11px] font-semibold ${valueTone}`}>{value}</span>
+    </div>
+  )
+}
+
+// ---- New: Weather chip (tiny inline reading) ----
+
+function WeatherChip({
+  icon: Icon, label, value, unit,
+}: {
+  icon: React.ElementType
+  label: string
+  value: string | number
+  unit: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="w-8 h-8 rounded-lg bg-[#FAFAFA] flex items-center justify-center text-gray-400 shrink-0">
+        <Icon size={14} />
+      </span>
+      <div className="flex flex-col leading-tight">
+        <span className="text-[9px] uppercase tracking-widest text-gray-400 font-medium">{label}</span>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[15px] font-semibold text-black">{value}</span>
+          <span className="text-[10px] text-gray-400">{unit}</span>
         </div>
       </div>
     </div>
   )
 }
 
-// Power Trend chart component
+// ---- Reused Chart Cards (unchanged from original) ----
+
 function PowerTrendCard({
   chartData, chartConfig, trendLoading, selectedDate, setSelectedDate,
   stats, expanded, onToggle, height,
@@ -245,7 +371,7 @@ function PowerTrendCard({
             <button
               type="button"
               onClick={onToggle}
-              className="h-9 w-9 flex items-center justify-center border border-[#E5E5E5] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
+              className="h-9 w-9 flex items-center justify-center border border-[#EDEDED] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
             >
               {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
@@ -368,7 +494,6 @@ function PowerTrendCard({
   )
 }
 
-// Series config — color + label + which Y axis + unit label
 const ELEC_GROUPS = [
   { key: 'voltage', label: 'Voltage', color: '#e17100' },
   { key: 'current', label: 'Current', color: '#497d00' },
@@ -404,14 +529,13 @@ function ElectricalTrendCard({
             <button
               type="button"
               onClick={onToggleExpand}
-              className="h-9 w-9 flex items-center justify-center border border-[#E5E5E5] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
+              className="h-9 w-9 flex items-center justify-center border border-[#EDEDED] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
             >
               {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
           </div>
         </div>
 
-        {/* Series checkboxes */}
         <div className="flex items-center gap-4 mt-3">
           {ELEC_GROUPS.map((g) => (
             <button key={g.key} type="button" onClick={() => onSeriesToggle(g.key)} className="flex items-center gap-1.5">
@@ -460,7 +584,7 @@ function ElectricalTrendCard({
                   width={60}
                   tickFormatter={(v) => `${Number(v).toFixed(1)}kV`}
                 />
-                                <YAxis
+                <YAxis
                   yAxisId="current"
                   orientation="right"
                   tick={{ fontSize: 10, fill: '#6B7280' }}
@@ -499,7 +623,6 @@ function ElectricalTrendCard({
   )
 }
 
-// Energy bar graph
 function DailyEnergyCard({
   chartData, loading,
 }: {
@@ -516,11 +639,11 @@ function DailyEnergyCard({
       </CardHeader>
       <CardContent className="px-2 pb-4">
         {loading ? (
-          <div className="h-[300px] flex items-center justify-center">
+          <div className="h-[280px] flex items-center justify-center">
             <p className="text-[13px] text-gray-400">Loading chart...</p>
           </div>
         ) : (
-          <div className="h-[300px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 24, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
@@ -550,12 +673,12 @@ function DailyEnergyCard({
                     return <rect x={x} y={y} width={width} height={height} rx={4} ry={4} fill={payload.fill} />
                   }}
                 >
-                <LabelList
-                  dataKey="energy_kwh"
-                  position="top"
-                  formatter={(v) => `${Number(v).toLocaleString()}\u00A0kWh`}
-                  style={{ fontSize: 10, fill: '#525252' }}
-                />
+                  <LabelList
+                    dataKey="energy_kwh"
+                    position="top"
+                    formatter={(v) => `${Number(v).toLocaleString()}\u00A0kWh`}
+                    style={{ fontSize: 10, fill: '#525252' }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -565,9 +688,10 @@ function DailyEnergyCard({
     </>
   )
 }
-// ---- Main Page ----
 
-export default function PlantOverviewPage() {
+// ---- Main Page (V2) ----
+
+export default function PlantOverviewPageV2() {
   const [overview, setOverview] = useState<PlantOverview | null>(null)
   const [trend, setTrend] = useState<PowerTrendPoint[]>([])
   const [stats, setStats] = useState<PowerTrendData['stats']>(null)
@@ -582,7 +706,7 @@ export default function PlantOverviewPage() {
   const [elecSelectedDate, setElecSelectedDate] = useState(todayString())
   const [elecExpanded, setElecExpanded] = useState(false)
   const [elecHidden, setElecHidden] = useState<Set<string>>(
-  new Set(['current', 'frequency']) // voltage only default
+    new Set(['current', 'frequency'])
   )
 
   const [refreshTick, setRefreshTick] = useState(0)
@@ -628,7 +752,7 @@ export default function PlantOverviewPage() {
   useEffect(() => {
     const interval = setInterval(() => {
       const idleMs = Date.now() - lastActivity.current
-      const isIdle = idleMs > 60_000          // idle > 1 min
+      const isIdle = idleMs > 60_000
       const isHidden = document.visibilityState !== 'visible'
       if (!isIdle && !isHidden) {
         setRefreshTick((t) => t + 1)
@@ -636,8 +760,6 @@ export default function PlantOverviewPage() {
     }, 60_000)
     return () => clearInterval(interval)
   }, [])
-
-
 
   function toggleElec(group: string) {
     setElecHidden((prev) => {
@@ -647,7 +769,6 @@ export default function PlantOverviewPage() {
     })
   }
 
-  // Fetch overview once
   useEffect(() => {
     const fetchOverview = async () => {
       try {
@@ -661,9 +782,8 @@ export default function PlantOverviewPage() {
       }
     }
     fetchOverview()
-  },  [site?.id, refreshTick])
+  }, [site?.id, refreshTick])
 
-  // Fetch trend whenever date changes
   useEffect(() => {
     const fetchTrend = async () => {
       setTrendLoading(true)
@@ -735,234 +855,251 @@ export default function PlantOverviewPage() {
     )
   }
 
+  const activePower = overview?.plant.active_power_kw ?? 0
+  const acCapacity = overview?.plant.ac_capacity_kw ?? 1
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6 px-2 md:px-0">
+    <div className="max-w-6xl mx-auto space-y-6 px-2 md:px-0 pb-8">
 
-    {/* Page Header */}
-    <div>
-      <h1 className="text-[20px] font-semibold text-black tracking-tight">
-        Plant Overview
-      </h1>
-      <p className="text-[13px] text-gray-500 mt-0.5">
-        {overview?.site} <span className="text-gray-300">·</span> {overview?.customer ?? '—'}
-      </p>
-      <p className="text-[12px] text-gray-400 mt-1">
-        AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW
-        <span className="mx-1 text-gray-300">/</span>
-        DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW
-      </p>
-    </div>
-
-    {/* Breaker/Inverter status (left) + Refresh (right) */}
-<div className="flex items-center justify-between flex-wrap gap-4">
-  <div className="flex flex-wrap items-center gap-3">
-    <StatusChip
-      label="Breaker"
-      value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'UNKNOWN'}
-      healthy={overview?.breaker_status ? overview.breaker_status === 'on' : null}
-      icon={Power}
-    />
-    <StatusChip
-      label="Inverters"
-      value={`${overview?.device_summary.online ?? 0}/${overview?.device_summary.total ?? 0} Online`}
-      healthy={overview ? overview.device_summary.online === overview.device_summary.total : null}
-      icon={Cpu}
-    />
-  </div>
-
-  <div className="flex flex-col items-end gap-1.5">
-    <button
-      type="button"
-      onClick={() => setRefreshTick((t) => t + 1)}
-      className="h-9 px-3 flex items-center gap-1.5 border border-[#E5E5E5] rounded-lg text-gray-500 hover:text-black hover:border-[#D4D4D4] transition-colors text-[12px] font-medium"
-    >
-      <RefreshCw size={13} />
-      Refresh
-    </button>
-    <p className="text-[13px] text-black-400 flex items-center gap-1">
-      <Clock size={11} />
-      Last updated {overview?.last_updated ? formatLastUpdated(overview.last_updated) : '—'}
-    </p>
-  </div>
-</div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          title="Active Power"
-          value={overview?.plant.active_power_kw ?? '—'}
-          unit="kW"
-          icon={Activity}
-          accent
-          footer="Live reading"
-        />
-        <KpiCard
-          title="Energy Today"
-          value={overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
-          unit="kWh"
-          icon={TrendingUp}
-          accent
-          footer="Today so far"
-        />
-        <KpiCard
-          title="Energy Total"
-          value={overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
-          unit="kWh"
-          icon={Zap}
-          accent
-          footer="Lifetime"
-        />
-        <KpiCard
-          title="CO₂ Avoided"
-          value={overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
-          unit="kg"
-          icon={Leaf}
-          accent
-          footer="Today so far"
-        />
-      </div>
-
-      {/* Weather Strip */}
-      {overview?.weather && (
-        <div className="grid grid-cols-3 gap-4">
-          {/* Irradiance */}
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-3 py-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[15px] uppercase tracking-wider text-black-400 font-semibold">Irradiance</p>
-              <div className="w-6 h-6 rounded-md bg-amber-600/10 flex items-center justify-center">
-                <Sun size={12} className="text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-bold text-black">{overview.weather.irradiation_inclined_wm2}</span>
-              <span className="text-[12px] text-black-400">W/m²</span>
-            </div>
-            <p className="text-[11px] text-green-700 mt-1">Inclined plane · live</p>
+      {/* ============ HERO PANEL ============ */}
+      <section className="relative bg-[#FAFAFA] rounded-3xl overflow-hidden">
+        {/* Top row: title left, refresh right */}
+        <div className="flex items-start justify-between px-8 pt-7 pb-2 flex-wrap gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">
+              Plant Overview
+            </p>
+            <h1 className="text-[26px] font-semibold text-black tracking-tight leading-tight">
+              {overview?.site}
+            </h1>
+            <p className="text-[13px] text-gray-500 mt-0.5">
+              {overview?.customer ?? '—'}
+              <span className="text-gray-300 mx-2">·</span>
+              AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW
+              <span className="text-gray-300 mx-1">/</span>
+              DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW
+            </p>
           </div>
 
-          {/* Ambient Temp */}
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-3 py-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[15px] uppercase tracking-wider text-black-400 font-semibold">Ambient Temp</p>
-              <div className="w-6 h-6 rounded-md bg-amber-600/10 flex items-center justify-center">
-                <Thermometer size={12} className="text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-bold text-black">{overview.weather.ambient_temp_c}</span>
-              <span className="text-[12px] text-black-400">°C</span>
-            </div>
-            <p className="text-[11px] text-green-700 mt-1">Air temperature</p>
-          </div>
-
-          {/* Module Temp */}
-          <div className="bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] border-l-[#497d00] px-3 py-2.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[15px] uppercase tracking-wider text-black-400 font-semibold">Module Temp</p>
-              <div className="w-6 h-6 rounded-md bg-amber-600/10 flex items-center justify-center">
-                <Thermometer size={12} className="text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-bold text-black">{overview.weather.module_temp_c}</span>
-              <span className="text-[12px] text-black-400">°C</span>
-            </div>
-            {tempDelta && (
-              <p className="text-[11px] mt-1">
-                <span className={`font-semibold ${Number(tempDelta) > 10 ? 'text-amber-600' : 'text-green-700'}`}>
-                  +{tempDelta}°C
-                </span>
-                <span className="text-green-700"> above ambient</span>
-              </p>
-            )}
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setRefreshTick((t) => t + 1)}
+              className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#EDEDED] rounded-full text-gray-500 hover:text-black hover:border-[#D4D4D4] transition-colors text-[12px] font-medium"
+            >
+              <RefreshCw size={13} />
+              Refresh
+            </button>
+            <p className="text-[11px] text-gray-500 flex items-center gap-1">
+              <Clock size={11} />
+              Updated {overview?.last_updated ? formatLastUpdated(overview.last_updated) : '—'}
+            </p>
           </div>
         </div>
-      )}
 
+        {/* Status pills row */}
+        <div className="flex flex-wrap items-center gap-2 px-8 pt-2">
+          <StatusPill
+            label="Breaker"
+            value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'UNKNOWN'}
+            healthy={overview?.breaker_status ? overview.breaker_status === 'on' : null}
+            icon={Power}
+          />
+          <StatusPill
+            label="Inverters"
+            value={`${overview?.device_summary.online ?? 0} / ${overview?.device_summary.total ?? 0}`}
+            healthy={overview ? overview.device_summary.online === overview.device_summary.total : null}
+            icon={Cpu}
+          />
+        </div>
 
-      {/* Generation Cards */}
-      <GenerationCards
-        actualToday={overview?.plant.energy_today_kwh ?? 0}
-        performanceRatio={overview?.performance?.performance_ratio_pct ?? 0}
-        cuf={overview?.performance?.cuf_pct ?? 0}
-      />
+        {/* Main hero content: gauge (left) + secondary stats (right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_1fr] gap-6 lg:gap-10 items-center px-8 py-8">
 
-{/* Power Trend + Grid Table */}
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Radial gauge */}
+          <div className="flex justify-center lg:justify-start">
+            <RadialGauge
+              value={activePower}
+              max={acCapacity}
+              unit="kW · Active Power"
+              color="#e17100"
+            />
+          </div>
 
-      {/* Power Trend - always in normal position, modal handles expansion */}
-      <Card className="border-[#E5E5E5] shadow-none rounded-xl md:col-span-2">
-        <PowerTrendCard
-          chartData={chartData}
-          chartConfig={chartConfig}
-          trendLoading={trendLoading}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
-          stats={stats}
-          expanded={chartExpanded}
-          onToggle={() => setChartExpanded(o => !o)}
-          height="h-[240px]"
-        />
-      </Card>
+          {/* Secondary metrics: 2x2 with hairline dividers */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-5 divide-x divide-[#EDEDED]">
+            <div className="pl-0 md:pl-0">
+              <InlineStat
+                label="Energy Today"
+                value={overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
+                unit="kWh"
+              />
+            </div>
+            <div className="pl-6">
+              <InlineStat
+                label="Energy Total"
+                value={overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
+                unit="kWh"
+              />
+            </div>
+            <div className="pl-6">
+              <InlineStat
+                label="CO₂ Avoided"
+                value={overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
+                unit="kg"
+                tone="olive"
+              />
+            </div>
+            <div className="pl-6">
+              <InlineStat
+                label="Power Factor"
+                value={overview?.plant.power_factor ?? '—'}
+              />
+            </div>
+          </div>
+        </div>
 
-      {/* Grid Table */}
-      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
-        <CardHeader className="pb-2 px-6 pt-5">
-          <CardTitle className="text-[18px] font-semibold text-black">Grid</CardTitle>
-          <p className="text-[12px] text-gray-400 mt-0.5">Voltage, current & power quality</p>
-        </CardHeader>
-        <CardContent className="px-6 pb-5 flex flex-col justify-center h-full">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-[#E5E5E5]">
-                <th className="text-left text-[10px] uppercase tracking-wider text-gray-400 font-medium pb-2"></th>
-                <th className="text-right text-[10px] uppercase tracking-wider text-gray-400 font-medium pb-2">Voltage</th>
-                <th className="text-right text-[10px] uppercase tracking-wider text-gray-400 font-medium pb-2">Current</th>
-                <th className="text-right text-[10px] uppercase tracking-wider text-gray-400 font-medium pb-2">Freq</th>
-                <th className="text-right text-[10px] uppercase tracking-wider text-gray-400 font-medium pb-2">PF</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
-                { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
-                { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
-              ].map((row, i) => (
-                <tr key={row.phase} className={`border-b border-[#FAFAFA] ${i % 2 === 1 ? 'bg-[#FCFCFC]' : 'bg-white'}`}>
-                  <td className="py-2.5 font-medium text-black">{row.phase}</td>
-                  <td className="py-2.5 text-right text-gray-600">
-                    {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
-                    <span className="text-[10px] text-gray-400 ml-0.5">kV</span>
-                  </td>
-                  <td className="py-2.5 text-right text-gray-600">
-                    {row.current?.toFixed(2) ?? '—'}
-                    <span className="text-[10px] text-gray-400 ml-0.5">A</span>
-                  </td>
-                  <td className="py-2.5 text-right text-gray-600">
-                    {overview?.plant.frequency_hz ?? '—'}
-                    <span className="text-[10px] text-gray-400 ml-0.5">Hz</span>
-                  </td>
-                  <td className="py-2.5 text-right text-gray-600">
-                    {overview?.plant.power_factor ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+        {/* Weather strip in the hero footer */}
+        {overview?.weather && (
+          <div className="border-t border-[#EDEDED] bg-white/60 px-8 py-4 flex flex-wrap items-center gap-x-8 gap-y-3">
+            <WeatherChip
+              icon={Sun}
+              label="Irradiance"
+              value={overview.weather.irradiation_inclined_wm2}
+              unit="W/m²"
+            />
+            <WeatherChip
+              icon={Thermometer}
+              label="Ambient"
+              value={overview.weather.ambient_temp_c}
+              unit="°C"
+            />
+            <WeatherChip
+              icon={Wind}
+              label="Module"
+              value={overview.weather.module_temp_c}
+              unit="°C"
+            />
+            {tempDelta && (
+              <div className="ml-auto text-[11px] text-gray-500">
+                Module {' '}
+                <span className={`font-semibold ${Number(tempDelta) > 10 ? 'text-amber-600' : 'text-[#497d00]'}`}>
+                  +{tempDelta}°C
+                </span>
+                {' '} above ambient
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
-      
+      {/* ============ PERFORMANCE STRIP (gauges) ============ */}
+      <section className="bg-white rounded-2xl border border-[#EDEDED] px-8 py-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-[15px] font-semibold text-black tracking-tight">Performance</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">Today · Live</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 items-center gap-4">
+          <SemiGauge
+            value={overview?.performance?.performance_ratio_pct ?? 0}
+            label="Performance Ratio"
+            tone="accent"
+          />
+          <SemiGauge
+            value={overview?.performance?.cuf_pct ?? 0}
+            label="Capacity Utilisation"
+            tone="olive"
+          />
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-12 h-12 rounded-full bg-[#FAFAFA] flex items-center justify-center text-[#e17100]">
+              <TrendingUp size={20} />
+            </div>
+            <span className="text-[22px] font-semibold text-black leading-none mt-2">
+              {overview?.performance?.poa_irradiation_kwh_m2?.toFixed(2) ?? '—'}
+            </span>
+            <span className="text-[10px] text-gray-400 mt-1">kWh/m²</span>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500 font-medium mt-1">POA Irradiation</p>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-12 h-12 rounded-full bg-[#FAFAFA] flex items-center justify-center text-[#497d00]">
+              <Leaf size={20} />
+            </div>
+            <span className="text-[22px] font-semibold text-black leading-none mt-2">
+              {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
+            </span>
+            <span className="text-[10px] text-gray-400 mt-1">kg CO₂</span>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500 font-medium mt-1">Avoided Today</p>
+          </div>
+        </div>
+      </section>
 
-    </div>
+      {/* ============ POWER TREND + GRID DATA ============ */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Power Trend — borderless */}
+        <div className="bg-white rounded-2xl border border-[#EDEDED] md:col-span-2">
+          <PowerTrendCard
+            chartData={chartData}
+            chartConfig={chartConfig}
+            trendLoading={trendLoading}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            stats={stats}
+            expanded={chartExpanded}
+            onToggle={() => setChartExpanded(o => !o)}
+            height="h-[240px]"
+          />
+        </div>
 
-    {/* Daily Energy */}
-<Card className="border-[#E5E5E5] shadow-none rounded-xl">
-  <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
-</Card>
+        {/* Grid data as clean list (no boxy table) */}
+        <div className="bg-white rounded-2xl border border-[#EDEDED] px-6 py-5">
+          <div className="mb-4">
+            <h2 className="text-[15px] font-semibold text-black tracking-tight">Grid</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {overview?.plant.frequency_hz ?? '—'} Hz
+              <span className="text-gray-300 mx-1.5">·</span>
+              PF {overview?.plant.power_factor ?? '—'}
+            </p>
+          </div>
+          <div className="flex flex-col divide-y divide-[#F1F1F1]">
+            {[
+              { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
+              { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
+              { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
+            ].map((row) => (
+              <div key={row.phase} className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium">Phase</span>
+                  <span className="text-[13px] font-semibold text-black">{row.phase}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold text-black tabular-nums">
+                      {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
+                    </span>
+                    <span className="text-[10px] text-gray-400">kV</span>
+                  </div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold text-[#497d00] tabular-nums">
+                      {row.current?.toFixed(2) ?? '—'}
+                    </span>
+                    <span className="text-[10px] text-gray-400">A</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-    {/* Electrical Trend */}
-      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
+      {/* ============ DAILY ENERGY ============ */}
+      <section className="bg-white rounded-2xl border border-[#EDEDED]">
+        <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
+      </section>
+
+      {/* ============ ELECTRICAL TREND ============ */}
+      <section className="bg-white rounded-2xl border border-[#EDEDED]">
         <ElectricalTrendCard
           chartData={elecChartData}
           trendLoading={elecTrendLoading}
@@ -974,9 +1111,9 @@ export default function PlantOverviewPage() {
           onToggleExpand={() => setElecExpanded(o => !o)}
           height="h-[280px]"
         />
-      </Card>
+      </section>
 
-      {/* Electrical Trend Modal */}
+      {/* Modals */}
       {elecExpanded && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -1003,33 +1140,32 @@ export default function PlantOverviewPage() {
         document.body
       )}
 
-    {/* Modal overlay — renders via portal above everything */}
-    {chartExpanded && createPortal(
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-6"
-        style={{ backdropFilter: 'blur(6px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
-        onClick={() => setChartExpanded(false)}
-      >
+      {chartExpanded && createPortal(
         <div
-          className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ backdropFilter: 'blur(6px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setChartExpanded(false)}
         >
-          <PowerTrendCard
-            chartData={chartData}
-            chartConfig={chartConfig}
-            trendLoading={trendLoading}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            stats={stats}
-            expanded={chartExpanded}
-            onToggle={() => setChartExpanded(false)}
-            height="h-[480px]"
-          />
-        </div>
-      </div>,
-      document.body
-    )}
+          <div
+            className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PowerTrendCard
+              chartData={chartData}
+              chartConfig={chartConfig}
+              trendLoading={trendLoading}
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              stats={stats}
+              expanded={chartExpanded}
+              onToggle={() => setChartExpanded(false)}
+              height="h-[480px]"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
 
-      </div>
+    </div>
   )
 }
