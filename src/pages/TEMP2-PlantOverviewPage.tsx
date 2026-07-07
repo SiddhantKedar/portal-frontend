@@ -873,8 +873,6 @@ export default function PlantOverviewPageV2() {
               {overview?.site}
             </h1>
             <p className="text-[13px] text-gray-500 mt-0.5">
-              {overview?.customer ?? '—'}
-              <span className="text-gray-300 mx-2">·</span>
               AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW
               <span className="text-gray-300 mx-1">/</span>
               DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW
