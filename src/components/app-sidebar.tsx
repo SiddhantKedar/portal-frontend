@@ -1,4 +1,4 @@
-import { LayoutDashboard, Zap, AudioWaveform, Activity, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun } from 'lucide-react'
+import { LayoutDashboard, AudioWaveform, Activity, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import {
   Sidebar,
@@ -48,8 +48,8 @@ export function AppSidebar() {
       {/* Logo */}
       <SidebarHeader className="border-b border-white/10 px-4 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-[30px] h-[30px] bg-amber-600 rounded-lg flex items-center justify-center">
-            <Zap size={15} className="text-white" />
+          <div className="w-[30px] h-[30px] flex items-center justify-center shrink-0">
+            <img src="/file_2.svg" alt="Enerlynx logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <span className="text-[15px] font-semibold text-amber-500 tracking-tight block uppercase">
