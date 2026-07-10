@@ -848,9 +848,15 @@ export default function PlantOverviewPage() {
         <div className="order-1 sm:order-2 flex items-center justify-between sm:flex-col sm:items-end gap-3 sm:gap-2 shrink-0">
           <p className={`${T.meta} flex items-center gap-1.5 whitespace-nowrap order-2 sm:order-2`}>
             <Clock size={13} strokeWidth={2} />
-            <span className="hidden sm:inline">Updated&nbsp;</span>
-            {overview?.last_updated ? formatLastUpdated(overview.last_updated) : '—'}
-          </p>
+            {overview?.last_updated ? (
+                <>
+                <span className="hidden sm:inline">Updated&nbsp;</span>
+                {formatLastUpdated(overview.last_updated)}
+                </>
+            ) : (
+                <span className="text-red-600 font-semibold">OFFLINE</span>
+            )}
+            </p>
           <button
             type="button"
             onClick={() => setRefreshTick((t) => t + 1)}
@@ -876,7 +882,7 @@ export default function PlantOverviewPage() {
               <div className="flex flex-wrap items-center gap-2 mt-4">
                 <StatusChip
                   label="Breaker"
-                  value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'UNKNOWN'}
+                  value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'OFFLINE'}
                   healthy={overview?.breaker_status ? overview.breaker_status === 'on' : null}
                   icon={Power}
                 />
