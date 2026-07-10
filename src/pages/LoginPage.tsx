@@ -57,14 +57,16 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex items-center gap-2.5 mb-8">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center">
-                <img src="/file_2.svg" alt="Enerlynx logo" className="w-full h-full object-contain" />
+                <img src="/final logo-cropped.svg" alt="Enerlynx logo" className="w-full h-full object-contain" />
             </div>
-            <span className="text-[15px] font-semibold text-black uppercase tracking-tight">
-              Enerlynx
-            </span>
+            <img
+        src="/Wording-dark.svg"
+        alt="Enerlynx"
+        className="h-[19px] w-auto object-contain"
+      />
           </div>
 
-          <h1 className="text-[24px] font-bold text-black tracking-tight mb-1">
+          <h1 className="text-[20px] font-bold text-black tracking-tight mb-1">
             Sign in
           </h1>
           <p className="text-[13px] text-gray-400 mb-7">

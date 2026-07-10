@@ -33,7 +33,7 @@ const SUB_ACTIVE = 'text-[12px] font-medium'
 const SUB_INACTIVE = 'text-[12px]'
 
 export function AppSidebar() {
-  const { site, devices } = useSite()
+  const { devices } = useSite()
   const { user } = useAuth()
 
   const inverters = devices
@@ -49,17 +49,14 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-white/10 px-4 py-4">
         <div className="flex items-center gap-2.5">
           <div className="w-[30px] h-[30px] flex items-center justify-center shrink-0">
-            <img src="/file_2.svg" alt="Enerlynx logo" className="w-full h-full object-contain" />
+            <img src="/final logo dark-cropped.svg" alt="Enerlynx logo" className="w-full h-full object-contain" />
           </div>
           <div>
-            <span className="text-[15px] font-semibold text-amber-500 tracking-tight block uppercase">
-              Enerlynx
-            </span>
-            {site && (
-              <span className="text-[11px] text-gray-400 block truncate max-w-[140px]">
-                {site.name}
-              </span>
-            )}
+            <img
+        src="/Wording-white.svg"
+        alt="Enerlynx"
+        className="h-[15px] w-auto object-contain"
+      />
           </div>
         </div>
       </SidebarHeader>
