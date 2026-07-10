@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Zap, TrendingUp, Cpu, Activity, Clock } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useRef, useState } from 'react'
+import { Zap, TrendingUp, Cpu, Gauge, Clock, RefreshCw, Sun } from 'lucide-react'
 import {
   ChartContainer,
   ChartTooltip,
@@ -9,11 +7,25 @@ import {
 } from '@/components/ui/chart'
 import {
   AreaChart, Area, XAxis, YAxis,
-  CartesianGrid, ResponsiveContainer
+  CartesianGrid, ResponsiveContainer,
 } from 'recharts'
 import { DatePicker } from '@/components/DatePicker'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
+
+// ============================================================
+// TYPE SCALE — matches PlantOverviewPage.tsx / MeterOverviewPage.tsx. Keep in sync.
+// ============================================================
+const T = {
+  eyebrow:      'text-[12px] uppercase tracking-[0.12em] text-black font-semibold',
+  meta:         'text-[13px] text-black',
+  body:         'text-[14px] text-black',
+  sectionTitle: 'text-[19px] font-semibold text-black tracking-tight',
+  siteH1:       'text-[26px] font-semibold text-black tracking-tight',
+  metricL:      'text-[22px] font-semibold text-black tracking-tight tabular-nums leading-none',
+  metricM:      'text-[16px] font-semibold text-black tabular-nums leading-none',
+  unit:         'text-[13px] text-black font-medium',
+}
 
 // ---- Types ----
 
@@ -27,6 +39,7 @@ interface InverterData {
   ac_power_factor: number
   grid_frequency_hz: number
   inverter_efficiency_pct: number
+  performance_ratio_pct: number
   status: string
   last_updated: string
 }
@@ -38,6 +51,8 @@ interface InverterOverview {
     total_energy_daily_kwh: number
     online_count: number
     total_count: number
+    performance_ratio_pct: number
+    poa_irradiation_kwh_m2: number
   }
   inverters: InverterData[]
 }
@@ -77,63 +92,309 @@ function todayString() {
   return new Date().toISOString().split('T')[0]
 }
 
-function avgEfficiency(inverters: InverterData[]) {
-  if (!inverters.length) return '—'
-  const avg = inverters.reduce((sum, i) => sum + i.inverter_efficiency_pct, 0) / inverters.length
-  return avg.toFixed(1)
+// PR color coding — shared threshold logic so the gauge, table cells, and
+// KPI callout all agree on what counts as "good".
+function prTone(pr: number) {
+  if (pr >= 78) return { text: 'text-[#497d00]', bar: 'bg-[#497d00]' }
+  if (pr >= 65) return { text: 'text-[#e17100]', bar: 'bg-[#e17100]' }
+  return { text: 'text-red-600', bar: 'bg-red-500' }
 }
 
-// ---- KPI Card — matches PlantOverviewPage exactly ----
-
-function KpiCard({
-  title, value, unit, icon: Icon, accent = false, footer,
+// ============================================================
+// Shared building blocks — identical to PlantOverview/MeterOverview
+// ============================================================
+function SectionHeader({
+  title, meta, accent = 'orange', actions,
 }: {
   title: string
-  value: string | number
-  unit: string
-  icon: React.ElementType
-  accent?: boolean
-  footer?: string
+  meta?: string
+  accent?: 'orange' | 'olive' | 'none'
+  actions?: React.ReactNode
 }) {
+  const bar =
+    accent === 'orange' ? 'bg-[#e17100]' :
+    accent === 'olive' ? 'bg-[#497d00]' : 'bg-black'
   return (
-    <div className={`bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] px-4 py-4 ${accent ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
-      <div className="flex items-start justify-between mb-2.5">
-        <p className="text-[14px] uppercase tracking-wider text-black-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
-          <Icon size={13} className={accent ? 'text-amber-600' : 'text-gray-400'} />
+    <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
+      <div className="flex items-stretch gap-3 min-w-0">
+        {accent !== 'none' && (
+          <span className={`w-1 self-stretch rounded-full ${bar} shrink-0`} />
+        )}
+        <div className="min-w-0 py-0.5">
+          <h2 className={`${T.sectionTitle} leading-tight`}>{title}</h2>
+          {meta && <p className={`${T.meta} mt-0.5`}>{meta}</p>}
         </div>
       </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-black tracking-tight leading-none">
-          {value}
-        </span>
-        <span className="text-[12px] text-black-400">{unit}</span>
-      </div>
-      {footer && (
-        <div className="flex items-center gap-1.5 mt-2">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
-          <span className="text-[11px] text-green-700">{footer}</span>
-        </div>
+      {actions && (
+        <div className="flex items-center gap-2 ml-auto shrink-0">{actions}</div>
       )}
     </div>
   )
 }
 
-// ---- Main Page ----
+function Divider() {
+  return <div className="h-px w-full bg-black/15" />
+}
 
+function Section({ children }: { children: React.ReactNode }) {
+  return <section className="pt-6">{children}</section>
+}
+
+function StatusChip({ status }: { status: string }) {
+  const online = status === 'online'
+  const dot = online ? 'bg-green-500' : 'bg-red-500'
+  const tone = online ? 'text-green-700' : 'text-red-600'
+  return (
+    <div className="inline-flex items-center gap-2 h-7 pl-2.5 pr-3 rounded-full border border-black/15 bg-white shrink-0">
+      <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />
+      <span className={`text-[12px] font-semibold ${tone} uppercase tracking-[0.08em]`}>{status}</span>
+    </div>
+  )
+}
+
+// KPI metric — editorial version of the old bordered KpiCard, matches
+// Plant Overview's energy-rail rows: eyebrow, value, unit, no boxes.
+function KpiMetric({
+  label, value, unit, icon: Icon, tone,
+}: {
+  label: string
+  value: string | number
+  unit?: string
+  icon: React.ElementType
+  tone?: 'orange' | 'olive'
+}) {
+  const iconColor = tone === 'orange' ? 'text-[#e17100]' : tone === 'olive' ? 'text-[#497d00]' : 'text-black'
+  const valColor  = tone === 'orange' ? 'text-[#e17100]' : tone === 'olive' ? 'text-[#497d00]' : ''
+  return (
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <div className="flex items-center gap-1.5">
+        <Icon size={14} className={`${iconColor} shrink-0`} strokeWidth={2} />
+        <p className={T.eyebrow}>{label}</p>
+      </div>
+      <div className="flex items-baseline gap-1.5 flex-wrap">
+        <span className={`${T.metricL} ${valColor}`}>{value}</span>
+        {unit && <span className={T.unit}>{unit}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Per-inverter snapshot card — same shell as Meter cards for consistency,
+// PR is the lead metric since that's the ask for this page.
+// ============================================================
+function InverterSnapshotCard({ inv }: { inv: InverterData }) {
+  const isOnline = inv.status === 'online'
+  const tone = prTone(inv.performance_ratio_pct)
+
+  return (
+    <div className="rounded-xl border border-black/15 overflow-hidden bg-white">
+      <div className={`h-1 w-full ${tone.bar}`} />
+      <div className="px-5 pt-4 pb-4">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <p className="text-[16px] font-semibold text-black truncate">{inv.name}</p>
+          <StatusChip status={inv.status} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+          <div className="flex items-start gap-2">
+            <Gauge size={14} className={`${tone.text} mt-0.5 shrink-0`} strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Perf. Ratio</p>
+              <p className={`${T.metricM} ${tone.text} mt-0.5`}>
+                {inv.performance_ratio_pct.toFixed(1)}
+                <span className={`${T.unit} ml-1`}>%</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <Zap size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Active Power</p>
+              <p className={`${T.metricM} mt-0.5`}>
+                {inv.ac_active_power_kw.toFixed(1)}
+                <span className={`${T.unit} ml-1`}>kW</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <Sun size={14} className="text-[#e17100] mt-0.5 shrink-0" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Energy Today</p>
+              <p className={`${T.metricM} text-[#e17100] mt-0.5`}>
+                {inv.energy_daily_kwh.toLocaleString()}
+                <span className={`${T.unit} ml-1`}>kWh</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <TrendingUp size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Efficiency</p>
+              <p className={`${T.metricM} mt-0.5`}>{inv.inverter_efficiency_pct.toFixed(1)}%</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-black/10">
+          <div className="flex items-center gap-1.5">
+            <span className={T.meta}>PF {inv.ac_power_factor.toFixed(2)}</span>
+            <span className="text-black/30">·</span>
+            <span className={T.meta}>{inv.grid_frequency_hz.toFixed(2)} Hz</span>
+          </div>
+          <span className={`${T.meta} flex items-center gap-1`}>
+            <Clock size={11} strokeWidth={2} />
+            {isOnline && inv.last_updated ? formatLastUpdated(inv.last_updated) : (
+              <span className="text-red-600 font-semibold">OFFLINE</span>
+            )}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Editorial inverters table — PR + efficiency both shown as distinct columns
+// ============================================================
+function InvertersTable({ inverters }: { inverters: InverterData[] }) {
+  return (
+    <div>
+      <SectionHeader
+        title="Inverters"
+        meta="Live data, efficiency & performance ratio per inverter"
+        accent="orange"
+      />
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full text-[13px] min-w-[820px] border-collapse">
+          <thead>
+            <tr className="border-b border-black/15">
+              <th className="sticky left-0 bg-white text-left text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
+                Inverter
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Active Power (kW)
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Reactive Power (kVAR)
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Energy Today (kWh)
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Energy Total (MWh)
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Efficiency
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Perf. Ratio
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Power Factor
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Frequency (Hz)
+              </th>
+              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {inverters.map((inv) => {
+              const tone = prTone(inv.performance_ratio_pct)
+              return (
+                <tr key={inv.device_id} className="border-b border-black/10">
+                  <td className="sticky left-0 bg-white py-3 px-3 font-semibold text-black whitespace-nowrap">
+                    {inv.name}
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {inv.ac_active_power_kw.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {inv.ac_reactive_power_kvar.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {inv.energy_daily_kwh.toLocaleString()}
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {(inv.energy_total_kwh / 1000).toFixed(1)}
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {inv.inverter_efficiency_pct.toFixed(1)}%
+                  </td>
+                  <td className={`py-3 px-3 text-right font-semibold tabular-nums ${tone.text}`}>
+                    {inv.performance_ratio_pct.toFixed(1)}%
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {inv.ac_power_factor.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                    {inv.grid_frequency_hz.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <div className="inline-flex">
+                      <StatusChip status={inv.status} />
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Main Page
+// ============================================================
 export default function InverterOverviewPage() {
-  const navigate = useNavigate()
+  const { site } = useSite()
   const [overview, setOverview] = useState<InverterOverview | null>(null)
   const [trend, setTrend] = useState<PowerTrendPoint[]>([])
   const [selectedDate, setSelectedDate] = useState(todayString())
   const [trendLoading, setTrendLoading] = useState(false)
   const [loading, setLoading] = useState(true)
-  const { site } = useSite()
+
+  const [refreshTick, setRefreshTick] = useState(0)
+  const lastActivity = useRef(Date.now())
+
+  // Activity tracking for auto-refresh backoff — identical to Plant/Meter Overview
+  useEffect(() => {
+    const updateActivity = () => { lastActivity.current = Date.now() }
+    window.addEventListener('mousemove', updateActivity)
+    window.addEventListener('keydown', updateActivity)
+    window.addEventListener('click', updateActivity)
+    return () => {
+      window.removeEventListener('mousemove', updateActivity)
+      window.removeEventListener('keydown', updateActivity)
+      window.removeEventListener('click', updateActivity)
+    }
+  }, [])
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastActivity.current
+      const isIdle = idleMs > 60_000
+      const isHidden = document.visibilityState !== 'visible'
+      if (!isIdle && !isHidden) {
+        setRefreshTick((t) => t + 1)
+      }
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (!site?.id) return
     const fetchOverview = async () => {
       try {
-        const res = await api.get<InverterOverview>(`/influx/inverter/overview/?site=${site?.id}`)
+        const res = await api.get<InverterOverview>(`/influx/inverter/overview/?site=${site.id}`)
         res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
         setOverview(res.data)
       } catch (err) {
@@ -143,14 +404,15 @@ export default function InverterOverviewPage() {
       }
     }
     fetchOverview()
-  }, [navigate])
+  }, [site?.id, refreshTick])
 
   useEffect(() => {
+    if (!site?.id) return
     const fetchTrend = async () => {
       setTrendLoading(true)
       try {
         const res = await api.get<PowerTrendData>(
-          `/influx/inverter/power-trend/?site=${site?.id}&date=${selectedDate}`
+          `/influx/inverter/power-trend/?site=${site.id}&date=${selectedDate}`
         )
         setTrend(res.data.data)
       } catch {
@@ -160,7 +422,7 @@ export default function InverterOverviewPage() {
       }
     }
     fetchTrend()
-  }, [selectedDate])
+  }, [site?.id, selectedDate])
 
   const chartData = trend.map((p) => ({
     time: minutesSinceMidnight(p.time),
@@ -171,253 +433,187 @@ export default function InverterOverviewPage() {
     power: { label: 'Active Power (kW)', color: '#e17100' },
   }
 
-  const lastUpdated = overview?.inverters[0]?.last_updated
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-60">
-        <p className="text-[13px] text-gray-400">Loading inverter overview...</p>
+        <p className={T.meta}>Loading inverter overview…</p>
       </div>
     )
   }
 
+  const latestUpdate = overview?.inverters
+    .map((i) => i.last_updated)
+    .filter((t): t is string => !!t)
+    .sort()
+    .at(-1)
+
+  const overallPR = overview?.summary.performance_ratio_pct ?? 0
+  const overallTone = prTone(overallPR)
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6 px-2 md:px-0">
+    <div className="w-full max-w-[1152px] mx-auto px-4 sm:px-6 md:px-6 lg:px-6 pb-10">
 
-      {/* Header */}
-      <div>
-        <h1 className="text-[20px] font-semibold text-black tracking-tight">
-          Inverter Overview
-        </h1>
-        <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">
-          <Clock size={12} />
-          {overview?.site} · Last updated {lastUpdated ? formatLastUpdated(lastUpdated) : '—'}
-        </p>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          title="Total Active Power"
-          value={overview?.summary.total_ac_active_power_kw ?? '—'}
-          unit="kW"
-          icon={Zap}
-          accent
-          footer="Live reading"
-        />
-        <KpiCard
-          title="Total Energy Today"
-          value={overview?.summary.total_energy_daily_kwh?.toLocaleString() ?? '—'}
-          unit="kWh"
-          icon={TrendingUp}
-          accent
-          footer="Today so far"
-        />
-        <KpiCard
-          title="Inverters Online"
-          value={`${overview?.summary.online_count ?? '—'}`}
-          unit={`/ ${overview?.summary.total_count ?? '—'}`}
-          icon={Cpu}
-          accent
-          footer="All operational"
-        />
-        <KpiCard
-          title="Avg Efficiency"
-          value={overview ? avgEfficiency(overview.inverters) : '—'}
-          unit="%"
-          icon={Activity}
-          accent
-          footer="Across all inverters"
-        />
-      </div>
-
-      {/* Inverters Table */}
-      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
-        <CardHeader className="pb-2 px-6 pt-5">
-          <CardTitle className="text-[18px] font-semibold text-black">
-            Inverters
-          </CardTitle>
-          <p className="text-[12px] text-gray-400 mt-0.5">
-            Live data & efficiency for all inverters on this site
+      {/* ============ HEADER ============ */}
+      <header className="pb-5 flex flex-col md:flex-row md:items-start md:justify-between md:flex-wrap gap-3 md:gap-6">
+        <div className="order-1 md:order-2 flex items-center justify-between md:flex-col md:items-end gap-3 md:gap-2 shrink-0">
+          <p className={`${T.meta} flex items-center gap-1.5 whitespace-nowrap`}>
+            <Clock size={13} strokeWidth={2} />
+            {latestUpdate ? (
+              <>
+                <span className="hidden md:inline">Updated&nbsp;</span>
+                {formatLastUpdated(latestUpdate)}
+              </>
+            ) : (
+              <span className="text-red-600 font-semibold">OFFLINE</span>
+            )}
           </p>
-        </CardHeader>
-        <CardContent className="px-6 pb-5">
-          <div className="rounded-lg border border-[#E5E5E5] overflow-auto max-h-[460px]">
-            <table className="w-full text-[13px] min-w-[940px]">
-              <thead className="sticky top-0 z-20">
-                <tr>
-                  <th
-                    rowSpan={2}
-                    className="sticky left-0 z-30 bg-[#FAFAFA] text-left text-[11px] uppercase tracking-wider text-gray-400 font-semibold px-4 py-3 align-middle rounded-tl-lg border-b border-[#E5E5E5]"
-                  >
-                    Inverter
-                  </th>
-                  <th
-                    colSpan={4}
-                    className="bg-[#FAFAFA] text-center text-[11px] uppercase tracking-wider text-gray-500 font-semibold py-2 border-b border-[#E5E5E5]"
-                  >
-                    Live Data
-                  </th>
-                  <th
-                    colSpan={3}
-                    className="bg-[#FAFAFA] text-center text-[11px] uppercase tracking-wider text-gray-500 font-semibold py-2 border-b border-[#E5E5E5] border-l-2 border-l-[#E5E5E5]"
-                  >
-                    Efficiency &amp; Performance
-                  </th>
-                  <th
-                    rowSpan={2}
-                    className="bg-[#FAFAFA] text-right text-[11px] uppercase tracking-wider text-gray-400 font-semibold px-4 py-3 align-middle rounded-tr-lg border-b border-[#E5E5E5]"
-                  >
-                    Status
-                  </th>
-                </tr>
-                <tr className="border-b border-[#E5E5E5]">
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
-                    Active Power <span className="text-gray-400">(kW)</span>
-                  </th>
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
-                    Reactive Power <span className="text-gray-400">(kVAR)</span>
-                  </th>
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
-                    Energy Today <span className="text-gray-400">(kWh)</span>
-                  </th>
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
-                    Energy Total <span className="text-gray-400">(MWh)</span>
-                  </th>
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap border-l-2 border-l-[#E5E5E5]">
-                    Efficiency
-                  </th>
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
-                    Power Factor
-                  </th>
-                  <th className="bg-[#FAFAFA] text-right text-[11px] text-gray-500 font-medium pb-2.5 pt-1 px-3 whitespace-nowrap">
-                    Frequency <span className="text-gray-400">(Hz)</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {overview?.inverters.map((inv, i) => {
-                  const isStripe = i % 2 === 1
-                  const rowBg = isStripe ? '#FAFAFA' : '#FFFFFF'
-                  return (
-                    <tr
-                      key={inv.device_id}
-                      className={`border-b border-[#F1F1F1] hover:bg-[#FAFAFA] transition-colors group ${isStripe ? 'bg-[#FAFAFA]' : 'bg-white'}`}
-                    >
-                      <td
-                        className="sticky left-0 z-10 py-3 px-4 font-medium text-black group-hover:bg-[#FAFAFA] transition-colors"
-                        style={{ background: rowBg }}
-                      >
-                        {inv.name}
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium">
-                        {inv.ac_active_power_kw}
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium">
-                        {inv.ac_reactive_power_kvar}
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium">
-                        {inv.energy_daily_kwh.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium">
-                        {(inv.energy_total_kwh / 1000).toFixed(1)}
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium border-l-2 border-l-[#F1F1F1]">
-                        {inv.inverter_efficiency_pct}%
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium">
-                        {inv.ac_power_factor.toFixed(2)}
-                      </td>
-                      <td className="py-3 px-3 text-right text-black font-medium">
-                        {inv.grid_frequency_hz}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                          inv.status === 'online' ? 'bg-green-500/10 text-green-700' : 'bg-red-50 text-red-500'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${inv.status === 'online' ? 'bg-green-500' : 'bg-red-400'}`} />
-                          {inv.status}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+          <button
+            type="button"
+            onClick={() => setRefreshTick((t) => t + 1)}
+            className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold"
+          >
+            <RefreshCw size={14} strokeWidth={2} />
+            Refresh
+          </button>
+        </div>
 
-      {/* Power Trend */}
-      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
-        <CardHeader className="pb-2 px-6 pt-5">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <CardTitle className="text-[18px] font-semibold text-black">
-                Power Trend
-              </CardTitle>
-              <p className="text-[12px] text-gray-400 mt-0.5">
-                Total inverter output · {selectedDate === todayString() ? 'Today' : selectedDate}
+        <div className="order-2 md:order-1 min-w-0">
+          <div className="flex items-stretch gap-3">
+            <span className="w-1 self-stretch rounded-full bg-[#e17100] shrink-0" />
+            <div className="min-w-0 py-0.5">
+              <p className={T.eyebrow}>Inverter Overview</p>
+              <h1 className={`${T.siteH1} mt-1 leading-tight break-words`}>{overview?.site ?? '—'}</h1>
+              <p className={`${T.body} mt-1`}>
+                {overview?.summary.total_count ?? 0} inverter{(overview?.summary.total_count ?? 0) !== 1 ? 's' : ''}
+                <span className="mx-2 text-black">·</span>
+                <span className="tabular-nums">{overview?.summary.online_count ?? 0}/{overview?.summary.total_count ?? 0} online</span>
               </p>
             </div>
-            <DatePicker
-              value={selectedDate}
-              onChange={setSelectedDate}
-              maxDate={new Date()}
-            />
           </div>
-        </CardHeader>
-        <CardContent className="px-2 pb-4">
-          {trendLoading ? (
-            <div className="h-[240px] flex items-center justify-center">
-              <p className="text-[13px] text-gray-400">Loading chart...</p>
+        </div>
+      </header>
+
+      {/* ============ KPI ROW ============ */}
+      <Divider />
+      <section className="pt-8 pb-8">
+        <div className="grid gap-x-6 gap-y-8 grid-cols-2 lg:grid-cols-4">
+          <KpiMetric
+            label="Total Active Power"
+            value={overview?.summary.total_ac_active_power_kw.toLocaleString() ?? '—'}
+            unit="kW"
+            icon={Zap}
+            tone="orange"
+          />
+          <KpiMetric
+            label="Energy Today"
+            value={overview?.summary.total_energy_daily_kwh?.toLocaleString() ?? '—'}
+            unit="kWh"
+            icon={Sun}
+            tone="orange"
+          />
+          <KpiMetric
+            label="Inverters Online"
+            value={`${overview?.summary.online_count ?? '—'}/${overview?.summary.total_count ?? '—'}`}
+            icon={Cpu}
+          />
+          <KpiMetric
+            label="Overall Performance Ratio"
+            value={overallPR.toFixed(1)}
+            unit="%"
+            icon={Gauge}
+            tone={overallTone.text.includes('497d00') ? 'olive' : 'orange'}
+          />
+        </div>
+      </section>
+
+      {/* ============ PER-INVERTER SNAPSHOTS ============ */}
+      {(overview?.inverters.length ?? 0) > 0 && (
+        <>
+          <Divider />
+          <Section>
+            <SectionHeader
+              title="Live Snapshot"
+              meta={`${todayString()} · Performance ratio per inverter`}
+              accent="olive"
+            />
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
+            >
+              {overview?.inverters.map((inv) => (
+                <InverterSnapshotCard key={inv.device_id} inv={inv} />
+              ))}
             </div>
-          ) : (
-            <ChartContainer config={chartConfig} className="h-[240px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="invPowerGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#e17100" stopOpacity={0.18} />
-                      <stop offset="95%" stopColor="#e17100" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
-                  <XAxis
-                    dataKey="time"
-                    type="number"
-                    domain={[0, 1440]}
-                    ticks={DAY_TICKS}
-                    tickFormatter={formatMinutesTick}
-                    tick={{ fontSize: 10, fill: '#8A8A8A' }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: '#8A8A8A' }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={38}
-                  />
-                  <ChartTooltip
-                    content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="power"
-                    stroke="#e17100"
-                    strokeWidth={1.5}
-                    fill="url(#invPowerGradient)"
-                    dot={false}
-                    connectNulls={false}
-                    activeDot={{ r: 4, fill: '#e17100' }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          )}
-        </CardContent>
-      </Card>
+          </Section>
+        </>
+      )}
+
+      {/* ============ INVERTERS TABLE ============ */}
+      <Divider />
+      <Section>
+        <InvertersTable inverters={overview?.inverters ?? []} />
+      </Section>
+
+      {/* ============ POWER TREND ============ */}
+      <Divider />
+      <Section>
+        <SectionHeader
+          title="Power Trend"
+          meta={`Total inverter output · ${selectedDate === todayString() ? 'Today' : selectedDate}`}
+          accent="orange"
+          actions={
+            <DatePicker value={selectedDate} onChange={setSelectedDate} maxDate={new Date()} />
+          }
+        />
+        {trendLoading ? (
+          <div className="h-[240px] flex items-center justify-center">
+            <p className={T.meta}>Loading chart…</p>
+          </div>
+        ) : (
+          <ChartContainer config={chartConfig} className="h-[240px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="invPowerGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#e17100" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#e17100" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+                <XAxis
+                  dataKey="time"
+                  type="number"
+                  domain={[0, 1440]}
+                  ticks={DAY_TICKS}
+                  tickFormatter={formatMinutesTick}
+                  tick={{ fontSize: 12, fill: '#171717' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#171717' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={44}
+                />
+                <ChartTooltip
+                  content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="power"
+                  stroke="#e17100"
+                  strokeWidth={1.5}
+                  fill="url(#invPowerGradient)"
+                  dot={false}
+                  connectNulls={false}
+                  activeDot={{ r: 4, fill: '#e17100' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+        )}
+      </Section>
 
     </div>
   )

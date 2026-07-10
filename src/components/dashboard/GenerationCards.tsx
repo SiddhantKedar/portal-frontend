@@ -53,6 +53,7 @@ function ComparisonCard({
             <CartesianGrid stroke="#F1F1F1" vertical={false} />
             <YAxis hide domain={[0, domainMax ?? 'auto']} />
             <Tooltip
+              cursor={false}
               formatter={(value, _name, props) => [formatValue(Number(value)), props.payload.name]}
               labelFormatter={() => ''}
               contentStyle={{
