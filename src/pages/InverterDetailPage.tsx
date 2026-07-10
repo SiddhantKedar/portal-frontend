@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Zap, TrendingUp, Gauge, Activity, Clock, Check, Maximize2, Minimize2 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  TrendingUp, Gauge, Activity, Clock, Check, Maximize2, Minimize2, RefreshCw, Sun,
+} from 'lucide-react'
 import {
   ChartContainer,
   ChartTooltip,
@@ -10,12 +11,27 @@ import {
 } from '@/components/ui/chart'
 import {
   ComposedChart, BarChart, Bar, Cell, LabelList, Area, Line, XAxis, YAxis,
-  CartesianGrid, ResponsiveContainer
+  CartesianGrid, ResponsiveContainer, RadialBarChart, RadialBar, PolarAngleAxis,
 } from 'recharts'
 import { format } from 'date-fns'
 import { DatePicker } from '@/components/DatePicker'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
+
+// ============================================================
+// TYPE SCALE — matches Plant/Meter/Inverter Overview. Keep in sync.
+// ============================================================
+const T = {
+  eyebrow:      'text-[12px] uppercase tracking-[0.12em] text-black font-semibold',
+  meta:         'text-[13px] text-black',
+  body:         'text-[14px] text-black',
+  sectionTitle: 'text-[19px] font-semibold text-black tracking-tight',
+  siteH1:       'text-[26px] font-semibold text-black tracking-tight',
+  metricXL:     'text-[38px] font-semibold text-black tracking-tight tabular-nums leading-none',
+  metricL:      'text-[22px] font-semibold text-black tracking-tight tabular-nums leading-none',
+  metricM:      'text-[15px] font-semibold text-black tabular-nums leading-none',
+  unit:         'text-[13px] text-black font-medium',
+}
 
 // ---- Types ----
 
@@ -28,6 +44,7 @@ interface InverterDetail {
   energy_total_kwh: number
   ac_power_factor: number
   inverter_efficiency_pct: number
+  performance_ratio_pct: number
   grid_frequency_hz: number
   ac_reactive_power_kvar: number
   internal_temp_c: number
@@ -35,7 +52,7 @@ interface InverterDetail {
   grid_voltage_bc_v: number
   grid_voltage_ca_v: number
   status: string
-  last_updated: string
+  last_updated: string | null
 }
 
 interface TrendPoint {
@@ -90,57 +107,163 @@ function dedupeDailyEnergy(points: DailyEnergyPoint[]) {
   return Array.from(map.entries()).map(([date, energy_kwh]) => ({ date, energy_kwh }))
 }
 
-// ---- KPI Card — matches PlantOverviewPage exactly ----
+// PR color coding — same thresholds as InverterOverviewPage, kept in sync
+function prTone(pr: number) {
+  if (pr >= 78) return { text: 'text-[#497d00]', fill: '#497d00' }
+  if (pr >= 65) return { text: 'text-[#e17100]', fill: '#e17100' }
+  return { text: 'text-red-600', fill: '#dc2626' }
+}
 
-function KpiCard({
-  title, value, unit, icon: Icon, accent = false, footer,
+// ============================================================
+// Shared building blocks — identical to Plant/Meter/Inverter Overview
+// ============================================================
+function SectionHeader({
+  title, meta, accent = 'orange', actions,
 }: {
   title: string
-  value: string | number
-  unit: string
-  icon: React.ElementType
-  accent?: boolean
-  footer?: string
+  meta?: string
+  accent?: 'orange' | 'olive' | 'none'
+  actions?: React.ReactNode
 }) {
+  const bar =
+    accent === 'orange' ? 'bg-[#e17100]' :
+    accent === 'olive' ? 'bg-[#497d00]' : 'bg-black'
   return (
-    <div className={`bg-white rounded-xl border border-[#D4D4D4] border-l-[4px] px-4 py-4 ${accent ? 'border-l-amber-600' : 'border-l-[#E5E5E5]'}`}>
-      <div className="flex items-start justify-between mb-2.5">
-        <p className="text-[14px] uppercase tracking-wider text-black-400 font-medium">{title}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${accent ? 'bg-amber-600/10' : 'bg-[#FAFAFA]'}`}>
-          <Icon size={13} className={accent ? 'text-amber-600' : 'text-gray-400'} />
+    <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
+      <div className="flex items-stretch gap-3 min-w-0">
+        {accent !== 'none' && (
+          <span className={`w-1 self-stretch rounded-full ${bar} shrink-0`} />
+        )}
+        <div className="min-w-0 py-0.5">
+          <h2 className={`${T.sectionTitle} leading-tight`}>{title}</h2>
+          {meta && <p className={`${T.meta} mt-0.5`}>{meta}</p>}
         </div>
       </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-[24px] font-semibold text-black tracking-tight leading-none">
-          {value}
-        </span>
-        <span className="text-[12px] text-black-400">{unit}</span>
-      </div>
-      {footer && (
-        <div className="flex items-center gap-1.5 mt-2">
-          {accent && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
-          <span className="text-[11px] text-green-700">{footer}</span>
-        </div>
+      {actions && (
+        <div className="flex items-center gap-2 ml-auto shrink-0">{actions}</div>
       )}
     </div>
   )
 }
 
-// ---- Electrical detail row ----
+function Divider() {
+  return <div className="h-px w-full bg-black/15" />
+}
 
-function DetailRow({ label, value, unit, isLast = false }: { label: string; value: string | number; unit?: string; isLast?: boolean }) {
+function Section({ children }: { children: React.ReactNode }) {
+  return <section className="pt-6">{children}</section>
+}
+
+function StatusChip({ status }: { status: string }) {
+  const online = status === 'online'
+  const dot = online ? 'bg-green-500' : 'bg-red-500'
+  const tone = online ? 'text-green-700' : 'text-red-600'
   return (
-    <tr className={isLast ? '' : 'border-b border-[#F1F1F1]'}>
-      <td className="py-2.5 text-[12px] text-gray-500">{label}</td>
-      <td className="py-2.5 text-right text-[13px] font-medium text-black">
-        {value}
-        {unit && <span className="text-[10px] text-gray-400 ml-1">{unit}</span>}
-      </td>
-    </tr>
+    <div className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 rounded-full border border-black/15 bg-white shrink-0">
+      <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />
+      <span className={`text-[12px] font-semibold ${tone} uppercase tracking-[0.08em]`}>{status}</span>
+    </div>
   )
 }
 
-// Power trend chart 
+function IconButton({
+  onClick, children,
+}: {
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-9 w-9 flex items-center justify-center border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors shrink-0"
+    >
+      {children}
+    </button>
+  )
+}
+
+// KPI metric — editorial version, matches Inverter Overview's KpiMetric
+function KpiMetric({
+  label, value, unit, icon: Icon, tone,
+}: {
+  label: string
+  value: string | number
+  unit?: string
+  icon: React.ElementType
+  tone?: 'orange' | 'olive' | 'red'
+}) {
+  const colorMap = { orange: 'text-[#e17100]', olive: 'text-[#497d00]', red: 'text-red-600' }
+  const iconColor = tone ? colorMap[tone] : 'text-black'
+  const valColor = tone ? colorMap[tone] : ''
+  return (
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <div className="flex items-center gap-1.5">
+        <Icon size={14} className={`${iconColor} shrink-0`} strokeWidth={2} />
+        <p className={T.eyebrow}>{label}</p>
+      </div>
+      <div className="flex items-baseline gap-1.5 flex-wrap">
+        <span className={`${T.metricL} ${valColor}`}>{value}</span>
+        {unit && <span className={T.unit}>{unit}</span>}
+      </div>
+    </div>
+  )
+}
+
+function ActivePowerGauge({ value }: { value: number }) {
+  // No fixed capacity field on this endpoint, so scale the arc against a
+  // generous round number rather than leaving it perpetually near-empty or
+  // clipped. 500kW covers a typical single-inverter range comfortably —
+  // swap for a real per-inverter capacity field if one becomes available.
+  const capacity = 500
+  const pct = Math.min(100, (value / capacity) * 100)
+  const data = [{ name: 'power', value: pct }]
+  return (
+    <div className="relative w-[180px] h-[180px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadialBarChart
+          data={data}
+          startAngle={225}
+          endAngle={-45}
+          innerRadius="78%"
+          outerRadius="100%"
+          barSize={11}
+        >
+          <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+          <RadialBar
+            dataKey="value"
+            cornerRadius={6}
+            fill="#e17100"
+            background={{ fill: 'rgba(0,0,0,0.06)' }}
+          />
+        </RadialBarChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-[32px] font-semibold tracking-tight tabular-nums leading-none text-[#e17100]">
+          {value.toFixed(1)}
+        </span>
+        <span className={`${T.unit} mt-1`}>kW</span>
+      </div>
+    </div>
+  )
+}
+
+// Electrical detail row — editorial hairline list
+function DetailRow({ label, value, unit, isLast = false }: { label: string; value: string | number; unit?: string; isLast?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 py-3 ${isLast ? '' : 'border-b border-black/10'}`}>
+      <p className={T.eyebrow}>{label}</p>
+      <div className="flex items-baseline gap-1 shrink-0">
+        <span className={T.metricM}>{value}</span>
+        {unit && <span className={T.unit}>{unit}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Power Trend chart
+// ============================================================
 function PowerTrendCard({
   trendChartData, trendChartConfig, trendLoading, selectedDate, setSelectedDate,
   hiddenSeries, toggleSeries, expanded, onToggle, height,
@@ -154,150 +277,212 @@ function PowerTrendCard({
   toggleSeries: (key: string) => void
   expanded: boolean
   onToggle: () => void
-  height: string
+  height: number
 }) {
+  const SERIES = [
+    { key: 'ac', label: 'AC Active', color: '#e17100' },
+    { key: 'dc', label: 'DC Input', color: '#497d00' },
+    { key: 'reactive', label: 'AC Reactive', color: '#8A8A8A' },
+  ]
+
   return (
-    <>
-      <CardHeader className="pb-2 px-6 pt-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <CardTitle className="text-[18px] font-semibold text-black">
-              Power Trend
-            </CardTitle>
-            <p className="text-[12px] text-gray-400 mt-0.5">
-              DC input · AC active · AC reactive · {selectedDate === todayString() ? 'Today' : selectedDate}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+    <div className={expanded ? 'px-6 pt-5 pb-5' : ''}>
+      <SectionHeader
+        title="Power Trend"
+        meta={`DC input · AC active · AC reactive · ${selectedDate === todayString() ? 'Today' : selectedDate}`}
+        accent="orange"
+        actions={
+          <>
             <DatePicker value={selectedDate} onChange={setSelectedDate} maxDate={new Date()} />
-            <button
-              type="button"
-              onClick={onToggle}
-              className="h-9 w-9 flex items-center justify-center border border-[#E5E5E5] rounded-lg text-gray-400 hover:text-black hover:border-[#D4D4D4] transition-colors"
-            >
+            <IconButton onClick={onToggle}>
               {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            </button>
-          </div>
+            </IconButton>
+          </>
+        }
+      />
+
+      <div className="flex items-center gap-4 flex-wrap mb-4">
+        {SERIES.map((s) => (
+          <button key={s.key} type="button" onClick={() => toggleSeries(s.key)} className="flex items-center gap-1.5">
+            <span
+              className="w-4 h-4 rounded-[4px] border flex items-center justify-center transition-colors"
+              style={{
+                backgroundColor: hiddenSeries.has(s.key) ? 'transparent' : s.color,
+                borderColor: hiddenSeries.has(s.key) ? '#D4D4D4' : s.color,
+              }}
+            >
+              {!hiddenSeries.has(s.key) && <Check size={11} className="text-white" strokeWidth={3} />}
+            </span>
+            <span className="text-[13px] text-black font-semibold">{s.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {trendLoading ? (
+        <div style={{ height }} className="flex items-center justify-center">
+          <p className={T.meta}>Loading chart…</p>
         </div>
-        <div className="flex items-center gap-4 mt-3">
-          <button type="button" onClick={() => toggleSeries('ac')} className="flex items-center gap-1.5">
-            <span
-              className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
-              style={{
-                backgroundColor: hiddenSeries.has('ac') ? 'transparent' : '#e17100',
-                borderColor: hiddenSeries.has('ac') ? '#D4D4D4' : '#e17100',
-              }}
-            >
-              {!hiddenSeries.has('ac') && <Check size={10} className="text-white" strokeWidth={3} />}
-            </span>
-            <span className="text-[11px] text-gray-500">AC Active</span>
-          </button>
-          <button type="button" onClick={() => toggleSeries('dc')} className="flex items-center gap-1.5">
-            <span
-              className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
-              style={{
-                backgroundColor: hiddenSeries.has('dc') ? 'transparent' : '#497d00',
-                borderColor: hiddenSeries.has('dc') ? '#D4D4D4' : '#497d00',
-              }}
-            >
-              {!hiddenSeries.has('dc') && <Check size={10} className="text-white" strokeWidth={3} />}
-            </span>
-            <span className="text-[11px] text-gray-500">DC Input</span>
-          </button>
-          <button type="button" onClick={() => toggleSeries('reactive')} className="flex items-center gap-1.5">
-            <span
-              className="w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center transition-colors"
-              style={{
-                backgroundColor: hiddenSeries.has('reactive') ? 'transparent' : '#8A8A8A',
-                borderColor: hiddenSeries.has('reactive') ? '#D4D4D4' : '#8A8A8A',
-              }}
-            >
-              {!hiddenSeries.has('reactive') && <Check size={10} className="text-white" strokeWidth={3} />}
-            </span>
-            <span className="text-[11px] text-gray-500">AC Reactive</span>
-          </button>
+      ) : (
+        <ChartContainer config={trendChartConfig} style={{ height, width: '100%' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="acPowerGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#e17100" stopOpacity={0.18} />
+                  <stop offset="95%" stopColor="#e17100" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+              <XAxis
+                dataKey="time"
+                type="number"
+                domain={[0, 1440]}
+                ticks={DAY_TICKS}
+                tickFormatter={formatMinutesTick}
+                tick={{ fontSize: 12, fill: '#171717' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: '#171717' }}
+                tickLine={false}
+                axisLine={false}
+                width={44}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(_label, payload) => {
+                      const time = payload?.[0]?.payload?.time
+                      return typeof time === 'number' ? formatMinutesTick(time) : ''
+                    }}
+                  />
+                }
+              />
+              {!hiddenSeries.has('ac') && (
+                <Area
+                  type="monotone"
+                  dataKey="ac"
+                  stroke="#e17100"
+                  strokeWidth={1.5}
+                  fill="url(#acPowerGradient)"
+                  dot={false}
+                  connectNulls={false}
+                  activeDot={{ r: 4, fill: '#e17100' }}
+                />
+              )}
+              {!hiddenSeries.has('dc') && (
+                <Line
+                  type="monotone"
+                  dataKey="dc"
+                  stroke="#497d00"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls={false}
+                  activeDot={{ r: 4, fill: '#497d00' }}
+                />
+              )}
+              {!hiddenSeries.has('reactive') && (
+                <Line
+                  type="monotone"
+                  dataKey="reactive"
+                  stroke="#8A8A8A"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls={false}
+                  activeDot={{ r: 4, fill: '#8A8A8A' }}
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+      )}
+    </div>
+  )
+}
+
+//  Energy Card 
+// NEW — add this component definition, placed near PowerTrendCard in the file
+function DailyEnergyCard({
+  chartData, loading,
+}: {
+  chartData: { label: string; energy: number; isToday: boolean }[]
+  loading: boolean
+  chartConfig: Record<string, { label: string; color: string }>
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Track viewport for label sizing (SVG text can't use Tailwind breakpoints)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  // Auto-scroll to the end (today) once the chart has data / width to scroll
+  useEffect(() => {
+    if (loading || !scrollRef.current) return
+    const el = scrollRef.current
+    el.scrollLeft = el.scrollWidth
+  }, [loading, chartData])
+
+  return (
+    <div>
+      <SectionHeader title="Daily Energy" meta="Last 7 days" accent="orange" />
+      {loading ? (
+        <div className="h-[280px] flex items-center justify-center">
+          <p className={T.meta}>Loading chart…</p>
         </div>
-      </CardHeader>
-      <CardContent className="px-2 pb-4">
-        {trendLoading ? (
-          <div className={`${height} flex items-center justify-center`}>
-            <p className="text-[13px] text-gray-400">Loading chart...</p>
-          </div>
-        ) : (
-          <ChartContainer config={trendChartConfig} className={`${height} w-full`}>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="h-[280px] w-full overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0"
+        >
+          <div className="h-full" style={{ width: `max(100%, ${chartData.length * 90}px)` }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="acPowerGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#e17100" stopOpacity={0.18} />
-                    <stop offset="95%" stopColor="#e17100" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <BarChart data={chartData} margin={{ top: 24, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
                 <XAxis
-                  dataKey="time"
-                  type="number"
-                  domain={[0, 1440]}
-                  ticks={DAY_TICKS}
-                  tickFormatter={formatMinutesTick}
-                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
+                  dataKey="label"
+                  tick={{ fontSize: 12, fill: '#171717' }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: '#8A8A8A' }}
+                  tick={{ fontSize: 12, fill: '#171717' }}
                   tickLine={false}
                   axisLine={false}
-                  width={38}
+                  width={44}
                 />
-                <ChartTooltip
-                  content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
-                />
-                {!hiddenSeries.has('ac') && (
-                  <Area
-                    type="monotone"
-                    dataKey="ac"
-                    stroke="#e17100"
-                    strokeWidth={1.5}
-                    fill="url(#acPowerGradient)"
-                    dot={false}
-                    connectNulls={false}
-                    activeDot={{ r: 4, fill: '#e17100' }}
+                <Bar dataKey="energy" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                  <LabelList
+                    dataKey="energy"
+                    position="top"
+                    formatter={(value: unknown) => {
+                      const num = typeof value === 'number' ? value : Number(value)
+                      return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0kWh` : ''
+                    }}
+                    style={{ fontSize: isMobile ? 10 : 12, fontWeight: 600, fill: '#171717' }}
                   />
-                )}
-                {!hiddenSeries.has('dc') && (
-                  <Line
-                    type="monotone"
-                    dataKey="dc"
-                    stroke="#497d00"
-                    strokeWidth={1.5}
-                    dot={false}
-                    connectNulls={false}
-                    activeDot={{ r: 4, fill: '#497d00' }}
-                  />
-                )}
-                {!hiddenSeries.has('reactive') && (
-                  <Line
-                    type="monotone"
-                    dataKey="reactive"
-                    stroke="#8A8A8A"
-                    strokeWidth={1.5}
-                    dot={false}
-                    connectNulls={false}
-                    activeDot={{ r: 4, fill: '#8A8A8A' }}
-                  />
-                )}
-              </ComposedChart>
+                  {chartData.map((d, i) => (
+                    <Cell key={i} fill={d.isToday ? '#e17100' : '#497d00'} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-          </ChartContainer>
-        )}
-      </CardContent>
-    </>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
-// ---- Main Page ----
-
+// ============================================================
+// Main Page
+// ============================================================
 export default function InverterDetailPage() {
   const { deviceId } = useParams<{ deviceId: string }>()
   const { site, devices } = useSite()
@@ -313,6 +498,12 @@ export default function InverterDetailPage() {
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set())
   const [chartExpanded, setChartExpanded] = useState(false)
 
+  const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
+  const [dailyLoading, setDailyLoading] = useState(true)
+
+  const [refreshTick, setRefreshTick] = useState(0)
+  const lastActivity = useRef(Date.now())
+
   function toggleSeries(key: string) {
     setHiddenSeries((prev) => {
       const next = new Set(prev)
@@ -325,14 +516,35 @@ export default function InverterDetailPage() {
     })
   }
 
-  const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
-  const [dailyLoading, setDailyLoading] = useState(true)
+  // Activity tracking for auto-refresh backoff — identical to other Overview pages
+  useEffect(() => {
+    const updateActivity = () => { lastActivity.current = Date.now() }
+    window.addEventListener('mousemove', updateActivity)
+    window.addEventListener('keydown', updateActivity)
+    window.addEventListener('click', updateActivity)
+    return () => {
+      window.removeEventListener('mousemove', updateActivity)
+      window.removeEventListener('keydown', updateActivity)
+      window.removeEventListener('click', updateActivity)
+    }
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastActivity.current
+      const isIdle = idleMs > 60_000
+      const isHidden = document.visibilityState !== 'visible'
+      if (!isIdle && !isHidden) {
+        setRefreshTick((t) => t + 1)
+      }
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Live snapshot
   useEffect(() => {
     if (!site?.id || !device?.id) return
     const fetchDetail = async () => {
-      setLoading(true)
       try {
         const res = await api.get<InverterDetail>(
           `/influx/inverter/detail/?site=${site.id}&device=${device.id}`
@@ -345,7 +557,7 @@ export default function InverterDetailPage() {
       }
     }
     fetchDetail()
-  }, [site?.id, device?.id])
+  }, [site?.id, device?.id, refreshTick])
 
   // Power trend
   useEffect(() => {
@@ -383,7 +595,7 @@ export default function InverterDetailPage() {
       }
     }
     fetchDailyEnergy()
-  }, [site?.id, device?.id])
+  }, [site?.id, device?.id, refreshTick])
 
   const trendChartData = useMemo(
     () =>
@@ -409,7 +621,7 @@ export default function InverterDetailPage() {
   if (!device) {
     return (
       <div className="flex items-center justify-center h-60">
-        <p className="text-[13px] text-gray-400">Device not found for this site.</p>
+        <p className={T.meta}>Device not found for this site.</p>
       </div>
     )
   }
@@ -417,7 +629,7 @@ export default function InverterDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-60">
-        <p className="text-[13px] text-gray-400">Loading inverter detail...</p>
+        <p className={T.meta}>Loading inverter detail…</p>
       </div>
     )
   }
@@ -432,112 +644,143 @@ export default function InverterDetailPage() {
     energy: { label: 'Energy (kWh)', color: '#e17100' },
   }
 
+  const pr = detail?.performance_ratio_pct ?? 0
+  const prToneVal = prTone(pr)
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6 px-2 md:px-0">
+    <div className="w-full max-w-[1152px] mx-auto px-4 sm:px-6 md:px-6 lg:px-6 pb-10">
 
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-[20px] font-semibold text-black tracking-tight">
-            {detail?.name}
-          </h1>
-          <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            detail?.status === 'online' ? 'bg-green-500/10 text-green-700' : 'bg-red-50 text-red-500'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${detail?.status === 'online' ? 'bg-green-500' : 'bg-red-400'}`} />
-            {detail?.status}
-          </span>
+      {/* ============ HEADER ============ */}
+      <header className="pb-5 flex flex-col md:flex-row md:items-start md:justify-between md:flex-wrap gap-3 md:gap-6">
+        <div className="order-1 md:order-2 flex items-center justify-between md:flex-col md:items-end gap-3 md:gap-2 shrink-0">
+          <p className={`${T.meta} flex items-center gap-1.5 whitespace-nowrap`}>
+            <Clock size={13} strokeWidth={2} />
+            {detail?.last_updated ? (
+              <>
+                <span className="hidden md:inline">Updated&nbsp;</span>
+                {formatLastUpdated(detail.last_updated)}
+              </>
+            ) : (
+              <span className="text-red-600 font-semibold">OFFLINE</span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => setRefreshTick((t) => t + 1)}
+            className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold"
+          >
+            <RefreshCw size={14} strokeWidth={2} />
+            Refresh
+          </button>
         </div>
-        <p className="text-[13px] text-gray-400 mt-0.5 flex items-center gap-1.5">
-          <Clock size={12} />
-          {detail?.site} · Last updated {detail?.last_updated ? formatLastUpdated(detail.last_updated) : '—'}
-        </p>
-      </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          title="Active Power"
-          value={detail?.ac_active_power_kw ?? '—'}
-          unit="kW"
-          icon={Zap}
-          accent
-          footer="Live reading"
+        <div className="order-2 md:order-1 min-w-0">
+          <div className="flex items-stretch gap-3">
+            <span className="w-1 self-stretch rounded-full bg-[#e17100] shrink-0" />
+            <div className="min-w-0 py-0.5">
+              <p className={T.eyebrow}>Inverter Detail</p>
+              <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                <h1 className={`${T.siteH1} leading-tight break-words`}>{detail?.name}</h1>
+                {detail && <StatusChip status={detail.status} />}
+              </div>
+              <p className={`${T.body} mt-1`}>{detail?.site}</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ============ KPI ROW + PR GAUGE ============ */}
+      <Divider />
+      <section className="pt-8 pb-8">
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8 md:gap-12 items-center">
+
+            {/* Active Power gauge column */}
+            <div className="flex flex-col items-center">
+              <p className={`${T.eyebrow} mb-3`}>Active Power</p>
+              <ActivePowerGauge value={detail?.ac_active_power_kw ?? 0} />
+            </div>
+
+            {/* KPI grid — PR now sits here as a plain colored number */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+              <KpiMetric
+                label="Performance Ratio"
+                value={pr.toFixed(1)}
+                unit="%"
+                icon={Gauge}
+                tone={prToneVal.text.includes('497d00') ? 'olive' : prToneVal.text.includes('dc2626') ? 'red' : 'orange'}
+              />
+              <KpiMetric
+                label="Energy Today"
+                value={detail?.energy_daily_kwh?.toLocaleString() ?? '—'}
+                unit="kWh"
+                icon={Sun}
+                tone="orange"
+              />
+              <KpiMetric
+                label="Total Energy"
+                value={detail ? (detail.energy_total_kwh / 1000).toFixed(1) : '—'}
+                unit="MWh"
+                icon={TrendingUp}
+                tone="olive"
+              />
+              <KpiMetric
+                label="Efficiency"
+                value={detail ? detail.inverter_efficiency_pct.toFixed(1) : '—'}
+                unit="%"
+                icon={Activity}
+              />
+            </div>
+          </div>
+        </section>
+
+      {/* ============ POWER TREND + ELECTRICAL DETAILS ============ */}
+      <Divider />
+      <Section>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
+          <div className="md:col-span-2 min-w-0">
+            <PowerTrendCard
+              trendChartData={trendChartData}
+              trendChartConfig={trendChartConfig}
+              trendLoading={trendLoading}
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              hiddenSeries={hiddenSeries}
+              toggleSeries={toggleSeries}
+              expanded={chartExpanded}
+              onToggle={() => setChartExpanded(o => !o)}
+              height={240}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <SectionHeader title="Electrical Details" meta="Grid & power quality" accent="olive" />
+            <div className="flex flex-col">
+              <DetailRow label="Voltage A-B" value={detail ? (detail.grid_voltage_ab_v / 1000).toFixed(2) : '—'} unit="kV" />
+              <DetailRow label="Voltage B-C" value={detail ? (detail.grid_voltage_bc_v / 1000).toFixed(2) : '—'} unit="kV" />
+              <DetailRow label="Voltage C-A" value={detail ? (detail.grid_voltage_ca_v / 1000).toFixed(2) : '—'} unit="kV" />
+              <DetailRow label="Frequency" value={detail?.grid_frequency_hz.toFixed(2) ?? '—'} unit="Hz" />
+              <DetailRow label="Power Factor" value={detail?.ac_power_factor.toFixed(2) ?? '—'} />
+              <DetailRow label="Reactive Power" value={detail?.ac_reactive_power_kvar.toFixed(2) ?? '—'} unit="kVAR" />
+              <DetailRow label="Internal Temp" value={detail?.internal_temp_c.toFixed(1) ?? '—'} unit="°C" isLast />
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ============ DAILY ENERGY ============ */}
+      <Divider />
+      <Section>
+        <DailyEnergyCard
+          chartData={dailyChartData}
+          loading={dailyLoading}
+          chartConfig={dailyChartConfig}
         />
-        <KpiCard
-          title="Energy Today"
-          value={detail?.energy_daily_kwh?.toLocaleString() ?? '—'}
-          unit="kWh"
-          icon={TrendingUp}
-          accent
-          footer="Today so far"
-        />
-        <KpiCard
-          title="Total Energy"
-          value={detail ? (detail.energy_total_kwh / 1000).toFixed(1) : '—'}
-          unit="MWh"
-          icon={Gauge}
-          accent
-          footer="Lifetime"
-        />
-        <KpiCard
-          title="Efficiency"
-          value={detail ? detail.inverter_efficiency_pct.toFixed(1) : '—'}
-          unit="%"
-          icon={Activity}
-          accent
-          footer="Current"
-        />
-      </div>
+      </Section>
 
-      {/* Power Trend + Electrical Details */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-
-        {/* Power Trend - 2/3 width */}
-        <Card className="border-[#E5E5E5] shadow-none rounded-xl md:col-span-2">
-          <PowerTrendCard
-            trendChartData={trendChartData}
-            trendChartConfig={trendChartConfig}
-            trendLoading={trendLoading}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            hiddenSeries={hiddenSeries}
-            toggleSeries={toggleSeries}
-            expanded={chartExpanded}
-            onToggle={() => setChartExpanded(o => !o)}
-            height="h-[240px]"
-          />
-        </Card>
-
-        {/* Electrical Details - 1/3 width */}
-        <Card className="border-[#E5E5E5] shadow-none rounded-xl">
-          <CardHeader className="pb-2 px-6 pt-5">
-            <CardTitle className="text-[18px] font-semibold text-black">
-              Electrical Details
-            </CardTitle>
-            <p className="text-[12px] text-gray-400 mt-0.5">Grid & power quality</p>
-          </CardHeader>
-          <CardContent className="px-6 pb-5">
-            <table className="w-full">
-              <tbody>
-                <DetailRow label="Voltage A-B" value={detail ? (detail.grid_voltage_ab_v / 1000).toFixed(2) : '—'} unit="kV" />
-                <DetailRow label="Voltage B-C" value={detail ? (detail.grid_voltage_bc_v / 1000).toFixed(2) : '—'} unit="kV" />
-                <DetailRow label="Voltage C-A" value={detail ? (detail.grid_voltage_ca_v / 1000).toFixed(2) : '—'} unit="kV" />
-                <DetailRow label="Frequency" value={detail?.grid_frequency_hz ?? '—'} unit="Hz" />
-                <DetailRow label="Power Factor" value={detail?.ac_power_factor.toFixed(2) ?? '—'} />
-                <DetailRow label="Reactive Power" value={detail?.ac_reactive_power_kvar ?? '—'} unit="kVAR" />
-                <DetailRow label="Internal Temp" value={detail?.internal_temp_c ?? '—'} unit="°C" isLast />
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-
-      </div>
-
-      {/* Modal overlay */}
+      {/* ============ Modal ============ */}
       {chartExpanded && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
           style={{ backdropFilter: 'blur(6px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
           onClick={() => setChartExpanded(false)}
         >
@@ -555,64 +798,12 @@ export default function InverterDetailPage() {
               toggleSeries={toggleSeries}
               expanded={chartExpanded}
               onToggle={() => setChartExpanded(false)}
-              height="h-[480px]"
+              height={480}
             />
           </div>
         </div>,
         document.body
       )}
-
-      {/* Daily Energy */}
-      <Card className="border-[#E5E5E5] shadow-none rounded-xl">
-        <CardHeader className="pb-2 px-6 pt-5">
-          <CardTitle className="text-[18px] font-semibold text-black">
-            Daily Energy
-          </CardTitle>
-          <p className="text-[12px] text-gray-400 mt-0.5">Last 7 days</p>
-        </CardHeader>
-        <CardContent className="px-2 pb-4">
-          {dailyLoading ? (
-            <div className="h-[300px] flex items-center justify-center">
-              <p className="text-[13px] text-gray-400">Loading chart...</p>
-            </div>
-          ) : (
-            <ChartContainer config={dailyChartConfig} className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyChartData} margin={{ top: 24, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10, fill: '#8A8A8A' }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: '#8A8A8A' }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={38}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="energy" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                    <LabelList
-                      dataKey="energy"
-                      position="top"
-                      formatter={(value: unknown) => {
-                        const num = typeof value === 'number' ? value : Number(value)
-                        return Number.isFinite(num) ? `${num.toFixed(1)}\u00A0kWh` : ''
-                      }}
-                      style={{ fontSize: 11, fontWeight: 600, fill: '#02060c' }}
-                    />
-                    {dailyChartData.map((d, i) => (
-                      <Cell key={i} fill={d.isToday ? '#e17100' : '#1A1A1A'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          )}
-        </CardContent>
-      </Card>
 
     </div>
   )

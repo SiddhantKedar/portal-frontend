@@ -169,14 +169,13 @@ function StatusChip({ status }: { status: string }) {
 // but restyled to the shared type scale + orange/olive accents.
 // ============================================================
 function MeterSnapshotCard({ meter }: { meter: Meter }) {
-  const isHT = meter.name.toLowerCase().includes('ht')
   const isOnline = meter.status === 'online'
 
   return (
     <div className="rounded-xl border border-black/15 overflow-hidden bg-white">
       {/* Accent strip on top instead of a left border — matches the page's
           horizontal accent-bar language better than a vertical stripe */}
-      <div className={`h-1 w-full ${isHT ? 'bg-[#e17100]' : 'bg-black/10'}`} />
+      <div className={"h-1 w-full bg-[#e17100]"} />
 
       <div className="px-5 pt-4 pb-4">
         {/* Name + status */}
@@ -192,16 +191,6 @@ function MeterSnapshotCard({ meter }: { meter: Meter }) {
 
         {/* Key metrics — 2x2, hairline dividers instead of icon boxes */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-          <div className="flex items-start gap-2">
-            <Sun size={14} className="text-[#e17100] mt-0.5 shrink-0" strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Today</p>
-              <p className={`${T.metricM} text-[#e17100] mt-0.5`}>
-                {meter.energy_today_kwh.toLocaleString()}
-                <span className={`${T.unit} ml-1`}>kWh</span>
-              </p>
-            </div>
-          </div>
 
           <div className="flex items-start gap-2">
             <Zap size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
@@ -211,6 +200,24 @@ function MeterSnapshotCard({ meter }: { meter: Meter }) {
                 {meter.active_power_total_kw.toFixed(1)}
                 <span className={`${T.unit} ml-1`}>kW</span>
               </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <Sun size={14} className="text-[#e17100] mt-0.5 shrink-0" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Today Export</p>
+              <p className={`${T.metricM} text-[#e17100] mt-0.5`}>
+                {meter.energy_today_kwh.toLocaleString()}
+                <span className={`${T.unit} ml-1`}>kWh</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <Gauge size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Power Factor</p>
+              <p className={`${T.metricM} mt-0.5`}>{meter.power_factor_total.toFixed(2)}</p>
             </div>
           </div>
 
@@ -225,13 +232,7 @@ function MeterSnapshotCard({ meter }: { meter: Meter }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-2">
-            <Gauge size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Power Factor</p>
-              <p className={`${T.metricM} mt-0.5`}>{meter.power_factor_total.toFixed(2)}</p>
-            </div>
-          </div>
+          
         </div>
 
         {/* Frequency + last updated, tucked below a hairline */}

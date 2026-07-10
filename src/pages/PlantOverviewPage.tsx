@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Sun, Thermometer, ThermometerSun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,
+  Sun, Thermometer, ThermometerSun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
 } from 'lucide-react'
 import {
   ChartContainer,
@@ -237,12 +237,12 @@ function WeatherCell({
   const iconColor = accent === 'orange' ? 'text-[#e17100]' : accent === 'olive' ? 'text-[#497d00]' : 'text-black'
   const valColor  = accent === 'orange' ? 'text-[#e17100]' : accent === 'olive' ? 'text-[#497d00]' : ''
   return (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <div className="flex items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1.5 min-w-0">
+      <div className="flex items-center justify-center gap-1.5">
         <Icon size={14} className={`${iconColor} shrink-0`} strokeWidth={2} />
         <p className={T.eyebrow}>{label}</p>
       </div>
-      <div className="flex items-baseline gap-1.5 flex-wrap">
+      <div className="flex items-baseline justify-center gap-1.5 flex-wrap">
         <span className={`${T.metricL} ${valColor}`}>{value}</span>
         <span className={T.unit}>{unit}</span>
       </div>
@@ -657,7 +657,7 @@ function DailyEnergyCard({
                   axisLine={false}
                   width={48}
                 />
-                <Tooltip
+                {/* <Tooltip
                   cursor={false}
                   contentStyle={{
                     fontSize: '13px', color: '#000', border: '1px solid #000',
@@ -665,7 +665,7 @@ function DailyEnergyCard({
                   }}
                   labelFormatter={(label) => formatDateTick(String(label))}
                   formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'Energy']}
-                />
+                /> */}
                 <Bar
                   dataKey="energy_kwh"
                   radius={[4, 4, 0, 0]}
@@ -935,54 +935,105 @@ export default function PlantOverviewPage() {
         </div>
       </header>
 
+    
       {/* ============ HERO: Gauge + Energy Rail ============ */}
       <Divider />
-      <section className="pt-8 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-8 md:gap-12 items-center max-w-4xl mx-auto">
+      <section className="pt-10 pb-3">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-10 md:gap-16 items-center">
 
-          {/* Gauge column */}
-          <div className="flex flex-col items-center">
-            <p className={`${T.eyebrow} mb-3`}>Active Power</p>
-            <PowerGauge
-              value={overview?.plant.active_power_kw ?? 0}
-              capacity={overview?.plant.ac_capacity_kw ?? 1}
-            />
-            <div className="flex items-center gap-1.5 mt-3">
-              <span className={`w-1.5 h-1.5 rounded-full ${overview?.last_updated ? 'bg-green-500 animate-pulse' : 'bg-black/30'}`} />
-              <span className={T.meta}>
-                <span className="tabular-nums font-semibold text-black">{capacityPct}%</span>
-                {' '}of {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW AC
-              </span>
-            </div>
-          </div>
+            {/* Gauge column — now sits on a soft tinted backdrop with capacity context above/below */}
+            <div className="flex flex-col items-center">
+              <div className="relative flex flex-col items-center px-8 py-8 rounded-3xl bg-gradient-to-b from-[#e17100]/[0.04] to-transparent w-full">
+                <p className={`${T.eyebrow} mb-4`}>Active Power</p>
+                <PowerGauge
+                  value={overview?.plant.active_power_kw ?? 0}
+                  capacity={overview?.plant.ac_capacity_kw ?? 1}
+                />
+                <div className="flex items-center gap-1.5 mt-4">
+                  <span className={`w-1.5 h-1.5 rounded-full ${overview?.last_updated ? 'bg-green-500 animate-pulse' : 'bg-black/30'}`} />
+                  <span className={T.meta}>
+                    <span className="tabular-nums font-semibold text-black">{capacityPct}%</span>
+                    {' '}of {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW AC
+                  </span>
+                </div>
 
-          {/* Energy rail — 3 stacked metrics divided by hairlines */}
-          <div className="flex flex-col">
-            <div className="flex items-baseline justify-between gap-3 py-3.5 border-b border-black/10">
-              <p className={`${T.eyebrow} min-w-0`}>Energy Today</p>
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={`${T.metricL} text-[#e17100]`}>
-                  {overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
-                </span>
-                <span className={T.unit}>kWh</span>
+                {/* DC capacity context — small footer stat tying gauge to DC rating */}
+                <div className="flex items-center gap-4 mt-5 pt-4 border-t border-black/10 w-full justify-center">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold text-black tabular-nums">
+                      {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'}
+                    </span>
+                    <span className="text-[11px] text-black/50">kW DC</span>
+                  </div>
+                  <span className="w-1 h-1 rounded-full bg-black/20" />
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold text-black tabular-nums">
+                      {overview && overview.plant.ac_capacity_kw
+                        ? (overview.plant.dc_capacity_kw / overview.plant.ac_capacity_kw).toFixed(2)
+                        : '—'}
+                    </span>
+                    <span className="text-[11px] text-black/50">DC/AC ratio</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex items-baseline justify-between gap-3 py-3.5 border-b border-black/10">
-              <p className={`${T.eyebrow} min-w-0`}>Energy Total</p>
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={T.metricL}>
-                  {overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
-                </span>
-                <span className={T.unit}>kWh</span>
+
+            {/* Energy rail — each metric now gets an icon, and a small descriptive
+                subtext to add substance beyond just a number */}
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between gap-4 py-5 border-b border-black/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#e17100]/10 flex items-center justify-center shrink-0">
+                    <Sun size={18} className="text-[#e17100]" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={T.eyebrow}>Energy Today</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Generated since midnight</p>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className={`${T.metricL} text-[#e17100]`}>
+                    {overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
+                  </span>
+                  <span className={T.unit}>kWh</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-baseline justify-between gap-3 py-3.5">
-              <p className={`${T.eyebrow} min-w-0`}>CO₂ Avoided Today</p>
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={`${T.metricL} text-[#497d00]`}>
-                  {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
-                </span>
-                <span className={T.unit}>kg</span>
+
+              <div className="flex items-center justify-between gap-4 py-5 border-b border-black/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-black/5 flex items-center justify-center shrink-0">
+                    <TrendingUp size={18} className="text-black" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={T.eyebrow}>Energy Total</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Lifetime cumulative export</p>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className={T.metricL}>
+                    {overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
+                  </span>
+                  <span className={T.unit}>kWh</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 py-5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#497d00]/10 flex items-center justify-center shrink-0">
+                    <Leaf size={18} className="text-[#497d00]" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={T.eyebrow}>CO₂ Avoided Today</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Equivalent emissions offset</p>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className={`${T.metricL} text-[#497d00]`}>
+                    {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
+                  </span>
+                  <span className={T.unit}>kg</span>
+                </div>
               </div>
             </div>
           </div>
@@ -995,7 +1046,7 @@ export default function PlantOverviewPage() {
           <Divider />
           <Section>
             <SectionHeader title="Weather" meta="Live · on-site sensors" accent="orange" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 pb-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 pb-3 justify-items-center text-center">
               <WeatherCell
                 icon={Sun}
                 label="Irradiance"
@@ -1016,9 +1067,9 @@ export default function PlantOverviewPage() {
                 unit="°C"
               />
               {tempDelta && (
-                <div className="flex flex-col gap-1.5 min-w-0">
+                <div className="flex flex-col items-center gap-1.5 min-w-0">
                   <p className={T.eyebrow}>Module Δ</p>
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <div className="flex items-baseline justify-center gap-1.5 flex-wrap">
                     <span className={`${T.metricL} ${deltaColor}`}>{deltaSign}{tempDelta}</span>
                     <span className={T.unit}>°C vs ambient</span>
                   </div>

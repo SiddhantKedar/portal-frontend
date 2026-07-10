@@ -1,4 +1,4 @@
-import { BarChart, Bar, Cell, YAxis, ResponsiveContainer, Tooltip, LabelList, CartesianGrid } from 'recharts'
+import { BarChart, Bar, Cell, YAxis, ResponsiveContainer, LabelList, CartesianGrid } from 'recharts'
 
 const COLORS = {
   actual: '#e17100',
@@ -37,9 +37,9 @@ function ComparisonCard({
   ]
 
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-        <p className="text-[15px] font-semibold text-black tracking-tight">{title}</p>
+    <div className="flex flex-col min-w-0">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-4">
+        <p className="text-[15px] font-semibold text-black tracking-tight leading-snug">{title}</p>
         <InlineLegend />
       </div>
       <div className="h-[200px] w-full">
@@ -52,19 +52,6 @@ function ComparisonCard({
           >
             <CartesianGrid stroke="#F1F1F1" vertical={false} />
             <YAxis hide domain={[0, domainMax ?? 'auto']} />
-            <Tooltip
-              cursor={false}
-              formatter={(value, _name, props) => [formatValue(Number(value)), props.payload.name]}
-              labelFormatter={() => ''}
-              contentStyle={{
-                fontSize: '13px',
-                color: '#000',
-                border: '1px solid #000',
-                borderRadius: '8px',
-                boxShadow: 'none',
-                fontWeight: 500,
-              }}
-            />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {data.map((entry, index) => (
                 <Cell key={index} fill={entry.fill} />
@@ -97,16 +84,17 @@ export function GenerationCards({
   cuf: number
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-0 md:divide-x md:divide-black/15">
-      <div className="md:pr-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-0 lg:divide-x lg:divide-black/15">
+      <div className="lg:pr-8 min-w-0">
         <ComparisonCard
           title="Generation"
           actual={actualToday}
           targeted={5500}
           formatValue={(n) => `${n.toLocaleString()}\u00A0kWh`}
+          domainMax={Math.max(actualToday, 5500) * 1.25}
         />
       </div>
-      <div className="md:px-8">
+      <div className="lg:px-8 min-w-0">
         <ComparisonCard
           title="Performance Ratio"
           actual={performanceRatio}
@@ -115,7 +103,7 @@ export function GenerationCards({
           domainMax={100}
         />
       </div>
-      <div className="md:pl-8">
+      <div className="lg:pl-8 min-w-0">
         <ComparisonCard
           title="Capacity Utilisation Factor"
           actual={cuf}
@@ -125,5 +113,6 @@ export function GenerationCards({
         />
       </div>
     </div>
+
   )
 }

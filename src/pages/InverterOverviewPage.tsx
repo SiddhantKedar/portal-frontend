@@ -197,16 +197,6 @@ function InverterSnapshotCard({ inv }: { inv: InverterData }) {
         </div>
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-          <div className="flex items-start gap-2">
-            <Gauge size={14} className={`${tone.text} mt-0.5 shrink-0`} strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Perf. Ratio</p>
-              <p className={`${T.metricM} ${tone.text} mt-0.5`}>
-                {inv.performance_ratio_pct.toFixed(1)}
-                <span className={`${T.unit} ml-1`}>%</span>
-              </p>
-            </div>
-          </div>
 
           <div className="flex items-start gap-2">
             <Zap size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
@@ -226,6 +216,17 @@ function InverterSnapshotCard({ inv }: { inv: InverterData }) {
               <p className={`${T.metricM} text-[#e17100] mt-0.5`}>
                 {inv.energy_daily_kwh.toLocaleString()}
                 <span className={`${T.unit} ml-1`}>kWh</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <Gauge size={14} className={`${tone.text} mt-0.5 shrink-0`} strokeWidth={2} />
+            <div className="min-w-0">
+              <p className={T.eyebrow}>Perf. Ratio</p>
+              <p className={`${T.metricM} ${tone.text} mt-0.5`}>
+                {inv.performance_ratio_pct.toFixed(1)}
+                <span className={`${T.unit} ml-1`}>%</span>
               </p>
             </div>
           </div>
@@ -597,7 +598,14 @@ export default function InverterOverviewPage() {
                   width={44}
                 />
                 <ChartTooltip
-                  content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(_label, payload) => {
+                        const time = payload?.[0]?.payload?.time
+                        return typeof time === 'number' ? formatMinutesTick(time) : ''
+                      }}
+                    />
+                  }
                 />
                 <Area
                   type="monotone"
