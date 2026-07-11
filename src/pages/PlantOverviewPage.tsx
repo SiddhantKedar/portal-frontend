@@ -1022,8 +1022,8 @@ export default function PlantOverviewPage() {
                     <Sun size={18} className="text-[#e17100]" strokeWidth={2} />
                   </div>
                   <div className="min-w-0">
-                    <p className={T.eyebrow}>Generated Since morning</p>
-                    <p className="text-[12px] text-black/50 mt-0.5">Generated since midnight</p>
+                    <p className={T.eyebrow}>Energy Today</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Generated since morning</p>
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5 shrink-0">
