@@ -281,6 +281,9 @@ function MeterTable({
               <th className="sticky left-0 bg-white text-left text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
                 Meter
               </th>
+              <th className="w-px text-center text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                Status
+              </th>
               {columns.map((c) => (
                 <th
                   key={c.key}
@@ -289,9 +292,7 @@ function MeterTable({
                   {c.label}
                 </th>
               ))}
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
-                Status
-              </th>
+              
             </tr>
           </thead>
           <tbody>
@@ -310,16 +311,14 @@ function MeterTable({
                     <td className="sticky left-0 bg-white py-3 px-3 font-semibold text-black whitespace-nowrap">
                       {m.name}
                     </td>
+                    <td className="w-px py-3 px-3 text-center whitespace-nowrap">
+                      <StatusChip status={m.status} />
+                    </td>
                     {columns.map((c) => (
                       <td key={c.key} className="py-3 px-3 text-right text-black font-medium tabular-nums">
                         {formatValue(m[c.key] as number)}
                       </td>
                     ))}
-                    <td className="py-3 px-3 text-right">
-                      <div className="inline-flex">
-                        <StatusChip status={m.status} />
-                      </div>
-                    </td>
                   </tr>
                 ))}
               </Fragment>

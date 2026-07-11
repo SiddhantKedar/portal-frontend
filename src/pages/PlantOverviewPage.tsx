@@ -224,6 +224,37 @@ function StatusChip({
   )
 }
 
+// Live-data indicator: green dot + label when fresh, red "Offline" when stale.
+// Uses a 30s local ticker so the badge flips to Offline even if no new fetch lands
+// (e.g. tab was idle, or the API stopped responding).
+function LiveDataIndicator({ lastUpdated }: { lastUpdated: string | null | undefined }) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const STALE_MS = 5 * 60 * 1000
+  const isLive = !!lastUpdated && (Date.now() - new Date(lastUpdated).getTime()) < STALE_MS
+
+  return (
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      <span
+        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+          isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+        }`}
+      />
+      <span
+        className={`text-[11px] font-semibold uppercase tracking-[0.1em] ${
+          isLive ? 'text-green-700' : 'text-red-600'
+        }`}
+      >
+        {isLive ? 'Live data' : 'Offline'}
+      </span>
+    </span>
+  )
+}
+
 // Weather cell — same visual weight as any other metric on the page
 function WeatherCell({
   icon: Icon, label, value, unit, accent,
@@ -435,10 +466,10 @@ function PowerTrendCard({
               Power
             </span>
             <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
-              {(['last', 'mean', 'max'] as const).map((k) => (
+              {(['last','max'] as const).map((k) => (
                 <div key={k} className="flex items-baseline gap-1.5">
-                  <span className={T.eyebrow}>{k === 'mean' ? 'Avg' : k === 'max' ? 'Peak' : 'Last'}</span>
-                  <span className={`text-[15px] font-semibold tabular-nums ${k === 'max' ? 'text-[#e17100]' : 'text-black'}`}>
+                  <span className={T.eyebrow}>{k === 'max' ? 'Peak' : 'Last'}</span>
+                  <span className={`text-[12px] font-semibold tabular-nums ${k === 'max' ? 'text-[#e17100]' : 'text-black'}`}>
                     {stats.active_power_total_kw[k]}
                   </span>
                   <span className={T.unit}>kW</span>
@@ -452,10 +483,10 @@ function PowerTrendCard({
               Irradiation
             </span>
             <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
-              {(['last', 'mean', 'max'] as const).map((k) => (
+              {(['last', 'max'] as const).map((k) => (
                 <div key={k} className="flex items-baseline gap-1.5">
-                  <span className={T.eyebrow}>{k === 'mean' ? 'Avg' : k === 'max' ? 'Peak' : 'Last'}</span>
-                  <span className={`text-[15px] font-semibold tabular-nums ${k === 'max' ? 'text-[#22C55E]' : 'text-black'}`}>
+                  <span className={T.eyebrow}>{k === 'max' ? 'Peak' : 'Last'}</span>
+                  <span className={`text-[12px] font-semibold tabular-nums ${k === 'max' ? 'text-[#22C55E]' : 'text-black'}`}>
                     {stats.irradiation_inclined_wm2[k]}
                   </span>
                   <span className={T.unit}>W/m²</span>
@@ -909,7 +940,10 @@ export default function PlantOverviewPage() {
           <div className="flex items-stretch gap-3">
             <span className="w-1 rounded-full bg-[#e17100] shrink-0 self-stretch" />
             <div className="min-w-0">
-              <p className={T.eyebrow}>Plant Overview</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className={T.eyebrow}>Plant Overview</p>
+                <LiveDataIndicator lastUpdated={overview?.last_updated} />
+              </div>
               <h1 className={`${T.siteH1} mt-2 break-words`}>{overview?.site ?? '—'}</h1>
               <p className={`${T.body} mt-1`}>
                 <span className="tabular-nums whitespace-nowrap">AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW</span>
@@ -988,7 +1022,7 @@ export default function PlantOverviewPage() {
                     <Sun size={18} className="text-[#e17100]" strokeWidth={2} />
                   </div>
                   <div className="min-w-0">
-                    <p className={T.eyebrow}>Energy Today</p>
+                    <p className={T.eyebrow}>Generated Since morning</p>
                     <p className="text-[12px] text-black/50 mt-0.5">Generated since midnight</p>
                   </div>
                 </div>
