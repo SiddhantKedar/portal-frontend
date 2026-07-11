@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Sun, Gauge, CloudRain, Droplets, Clock, RefreshCw, Moon,
+  Sun, Gauge, CloudRain, Droplets, Clock, RefreshCw,
 } from 'lucide-react'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
@@ -19,6 +19,9 @@ const T = {
   metricM:      'text-[16px] font-semibold text-black tabular-nums leading-none',
   unit:         'text-[13px] text-black font-medium',
 }
+
+const TEMP_GRADIENT =
+  'linear-gradient(to right, #6b7280 0%, #497d00 40%, #e17100 60%, #e17100 100%)'
 
 // ---- Types ----
 
@@ -124,23 +127,70 @@ function StatusChip({ status }: { status: string }) {
 // At 0 W/m² it becomes a subtle moon (night mode).
 // ============================================================
 function AnimatedSun({ irradiance }: { irradiance: number }) {
-  const isNight = irradiance <= 1
+  const isNight = irradiance <= 10
   const intensityPct = Math.min(1, irradiance / 1000)
   // Rays extend further and get warmer with higher irradiance
   const rayLength = 8 + intensityPct * 10
   const rayOpacity = 0.35 + intensityPct * 0.6
   const coreSize = 32 + intensityPct * 6
 
-  if (isNight) {
-    return (
-      <div className="relative w-[160px] h-[160px] flex items-center justify-center">
-        <div className="w-24 h-24 rounded-full bg-black/5 flex items-center justify-center">
-          <Moon size={48} className="text-black/40" strokeWidth={1.5} />
-        </div>
+if (isNight) {
+  const stars = [
+      { cx: 24, cy: 34, r: 1.8, delay: '0s'   },
+      { cx: 136, cy: 28, r: 1.4, delay: '0.7s' },
+      { cx: 18, cy: 112, r: 1.5, delay: '1.4s' },
+      { cx: 142, cy: 104, r: 1.9, delay: '0.4s' },
+      { cx: 50, cy: 146, r: 1.3, delay: '1.8s' },
+      { cx: 116, cy: 140, r: 1.4, delay: '1.1s' },
+      { cx: 82, cy: 18, r: 1.2, delay: '2.1s' },
+      { cx: 8, cy: 72, r: 1.1, delay: '0.9s' },
+      { cx: 150, cy: 66, r: 1.2, delay: '1.6s' },
+    ]
+  return (
+    <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: 145, height: 145,
+          background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)',
+          animation: 'weatherMoonGlow 5s ease-in-out infinite',
+        }}
+      />
+      <svg viewBox="0 0 160 160" className="absolute inset-0 w-full h-full">
+        {stars.map((s, i) => (
+          <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill="#e2e8f0"
+            style={{ animation: `weatherStarTwinkle 3s ease-in-out ${s.delay} infinite`,
+                     transformOrigin: `${s.cx}px ${s.cy}px` }} />
+        ))}
+      </svg>
+      <div style={{ animation: 'weatherMoonSway 6s ease-in-out infinite', transformOrigin: 'center' }}>
+        <svg viewBox="0 0 100 100" width="90" height="90" style={{ transform: 'rotate(-18deg)' }}>
+          <defs>
+            <radialGradient id="moonV1Surface" cx="30%" cy="30%" r="75%">
+              <stop offset="0%" stopColor="#f8fafc" />
+              <stop offset="70%" stopColor="#cbd5e1" />
+              <stop offset="100%" stopColor="#64748b" />
+            </radialGradient>
+            <mask id="moonV1Mask">
+              <rect width="100" height="100" fill="white" />
+              <circle cx="64" cy="40" r="34" fill="black" />
+            </mask>
+          </defs>
+          <circle cx="50" cy="50" r="34" fill="#1e293b" opacity="0.06" />
+          <circle cx="50" cy="50" r="32" fill="url(#moonV1Surface)" mask="url(#moonV1Mask)" />
+          <circle cx="34" cy="60" r="2.5" fill="#94a3b8" opacity="0.35" mask="url(#moonV1Mask)" />
+          <circle cx="42" cy="74" r="1.8" fill="#94a3b8" opacity="0.3"  mask="url(#moonV1Mask)" />
+          <circle cx="28" cy="46" r="1.4" fill="#94a3b8" opacity="0.28" mask="url(#moonV1Mask)" />
+        </svg>
       </div>
-    )
-  }
-
+      <style>{`
+        @keyframes weatherMoonSway  { 0%,100% { transform: rotate(-1.5deg) translateY(0); } 50% { transform: rotate(1.5deg) translateY(-2px); } }
+        @keyframes weatherMoonGlow  { 0%,100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+        @keyframes weatherStarTwinkle { 0%,100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+      `}</style>
+    </div>
+  )
+}
   return (
     <div className="relative w-[160px] h-[160px] flex items-center justify-center">
       {/* Outer glow — softly pulses at high irradiance */}
@@ -298,7 +348,9 @@ function TemperatureVis({ ambient, module }: { ambient: number; module: number }
             className="h-full rounded-full transition-all duration-700"
             style={{
               width: `${modulePct}%`,
-              background: 'linear-gradient(to right, #497d00 0%, #e17100 60%, #dc2626 100%)',
+              background: TEMP_GRADIENT,
+              backgroundSize: `${(100 / Math.max(modulePct, 0.5)) * 100}% 100%`,
+              backgroundPosition: 'left center',
             }}
           />
         </div>
@@ -315,8 +367,13 @@ function TemperatureVis({ ambient, module }: { ambient: number; module: number }
         </div>
         <div className="h-3 bg-black/5 rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full bg-black/40 transition-all duration-700"
-            style={{ width: `${ambientPct}%` }}
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${ambientPct}%`,
+              background: TEMP_GRADIENT,
+              backgroundSize: `${(100 / Math.max(ambientPct, 0.5)) * 100}% 100%`,
+              backgroundPosition: 'left center',
+            }}
           />
         </div>
       </div>

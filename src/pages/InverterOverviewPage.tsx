@@ -276,6 +276,9 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
               <th className="sticky left-0 bg-white text-left text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
                 Inverter
               </th>
+              <th className="text-center text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
+                Status
+              </th>
               <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
                 Active Power (kW)
               </th>
@@ -300,9 +303,7 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
               <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
                 Frequency (Hz)
               </th>
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
-                Status
-              </th>
+              
             </tr>
           </thead>
           <tbody>
@@ -312,6 +313,11 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
                 <tr key={inv.device_id} className="border-b border-black/10">
                   <td className="sticky left-0 bg-white py-3 px-3 font-semibold text-black whitespace-nowrap">
                     {inv.name}
+                  </td>
+                  <td className="py-3 px-3 text-center">
+                    <div className="inline-flex">
+                      <StatusChip status={inv.status} />
+                    </div>
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
                     {inv.ac_active_power_kw.toFixed(2)}
@@ -336,11 +342,6 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
                     {inv.grid_frequency_hz.toFixed(2)}
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <div className="inline-flex">
-                      <StatusChip status={inv.status} />
-                    </div>
                   </td>
                 </tr>
               )
