@@ -289,7 +289,7 @@ function PerformanceZoneCard({
   return (
     <div className="flex flex-col min-w-0">
       <p className="text-[15px] font-semibold text-black tracking-tight leading-snug mb-4">{title}</p>
-      <div className="flex flex-col justify-center h-[200px] gap-4">
+      <div className="flex flex-col justify-center h-[90px] md:h-[200px] gap-4">
         <div className="flex items-baseline justify-between">
           <span className="text-[26px] font-semibold text-black tracking-tight tabular-nums leading-none">
             {formatValue(actual)}
@@ -310,8 +310,7 @@ function PerformanceZoneCard({
           {/* Target line at zone boundary */}
           <div className="absolute inset-y-0 w-[2px] bg-black" style={{ left: `calc(${zone100}% - 1px)` }} />
         </div>
-        <div className="flex items-center justify-between text-[11px] text-black/50 font-medium">
-          <span>Behind · Near · On target</span>
+        <div className="flex items-center justify-end text-[11px] text-black/50 font-medium">
           <span>Target · {formatValue(targeted)}</span>
         </div>
       </div>
