@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Sun, Thermometer, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,
+  Sun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
 } from 'lucide-react'
 import {
   ChartContainer,
@@ -33,6 +33,9 @@ const T = {
   metricM:      'text-[15px] font-semibold text-black tabular-nums leading-none',
   unit:         'text-[13px] text-black font-medium',
 }
+
+const TEMP_GRADIENT =
+  'linear-gradient(to right, #6b7280 0%, #497d00 40%, #e17100 60%, #e17100 100%)'
 
 // ---- Types ----
 
@@ -180,10 +183,10 @@ function SectionHeader({
     accent === 'orange' ? 'bg-[#e17100]' :
     accent === 'olive' ? 'bg-[#497d00]' : 'bg-black'
   return (
-    <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
-      <div className="flex items-start gap-3 min-w-0">
+    <div className="flex items-stretch justify-between flex-wrap gap-3 mb-5">
+      <div className="flex items-stretch gap-3 min-w-0">
         {accent !== 'none' && (
-          <span className={`w-1 h-6 rounded-full ${bar} mt-1.5 shrink-0`} />
+          <span className={`w-1 rounded-full ${bar} shrink-0 self-stretch`} />
         )}
         <div className="min-w-0">
           <h2 className={T.sectionTitle}>{title}</h2>
@@ -224,30 +227,169 @@ function StatusChip({
   )
 }
 
-// Weather cell — same visual weight as any other metric on the page
-function WeatherCell({
-  icon: Icon, label, value, unit, accent,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string | number
-  unit: string
-  accent?: 'orange' | 'olive'
-}) {
-  const iconColor = accent === 'orange' ? 'text-[#e17100]' : accent === 'olive' ? 'text-[#497d00]' : 'text-black'
-  const valColor  = accent === 'orange' ? 'text-[#e17100]' : accent === 'olive' ? 'text-[#497d00]' : ''
+// Live-data indicator: green dot + label when fresh, red "Offline" when stale.
+// Uses a 30s local ticker so the badge flips to Offline even if no new fetch lands
+// (e.g. tab was idle, or the API stopped responding).
+function LiveDataIndicator({ lastUpdated }: { lastUpdated: string | null | undefined }) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const STALE_MS = 5 * 60 * 1000
+  const isLive = !!lastUpdated && (Date.now() - new Date(lastUpdated).getTime()) < STALE_MS
+
   return (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <div className="flex items-center gap-1.5">
-        <Icon size={14} className={`${iconColor} shrink-0`} strokeWidth={2} />
-        <p className={T.eyebrow}>{label}</p>
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      <span
+        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+          isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+        }`}
+      />
+      <span
+        className={`text-[11px] font-semibold uppercase tracking-[0.1em] ${
+          isLive ? 'text-green-700' : 'text-red-600'
+        }`}
+      >
+        {isLive ? 'Live data' : 'Offline'}
+      </span>
+    </span>
+  )
+}
+
+// ============================================================
+// Animated Sun — the playful centerpiece, ported from WeatherPage.
+// Rays grow, brighten, and rotate based on irradiance.
+// At low irradiance it becomes a subtle moon + stars (night mode).
+// ============================================================
+function AnimatedSun({ irradiance }: { irradiance: number }) {
+  const isNight = irradiance <= 10
+  const intensityPct = Math.min(1, irradiance / 1000)
+  const rayLength = 8 + intensityPct * 10
+  const rayOpacity = 0.35 + intensityPct * 0.6
+  const coreSize = 32 + intensityPct * 6
+
+  if (isNight) {
+    const stars = [
+      { cx: 24, cy: 34, r: 1.8, delay: '0s' },
+      { cx: 136, cy: 28, r: 1.4, delay: '0.7s' },
+      { cx: 18, cy: 112, r: 1.5, delay: '1.4s' },
+      { cx: 142, cy: 104, r: 1.9, delay: '0.4s' },
+      { cx: 50, cy: 146, r: 1.3, delay: '1.8s' },
+      { cx: 116, cy: 140, r: 1.4, delay: '1.1s' },
+      { cx: 82, cy: 18, r: 1.2, delay: '2.1s' },
+      { cx: 8, cy: 72, r: 1.1, delay: '0.9s' },
+      { cx: 150, cy: 66, r: 1.2, delay: '1.6s' },
+    ]
+    return (
+      <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+        <div
+          className="absolute rounded-full"
+          style={{
+            width: 145, height: 145,
+            background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)',
+            animation: 'weatherMoonGlow 5s ease-in-out infinite',
+          }}
+        />
+        <svg viewBox="0 0 160 160" className="absolute inset-0 w-full h-full">
+          {stars.map((s, i) => (
+            <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill="#e2e8f0"
+              style={{ animation: `weatherStarTwinkle 3s ease-in-out ${s.delay} infinite`,
+                       transformOrigin: `${s.cx}px ${s.cy}px` }} />
+          ))}
+        </svg>
+        <div style={{ animation: 'weatherMoonSway 6s ease-in-out infinite', transformOrigin: 'center' }}>
+          <svg viewBox="0 0 100 100" width="90" height="90" style={{ transform: 'rotate(-18deg)' }}>
+            <defs>
+              <radialGradient id="moonPlantSurface" cx="30%" cy="30%" r="75%">
+                <stop offset="0%" stopColor="#f8fafc" />
+                <stop offset="70%" stopColor="#cbd5e1" />
+                <stop offset="100%" stopColor="#64748b" />
+              </radialGradient>
+              <mask id="moonPlantMask">
+                <rect width="100" height="100" fill="white" />
+                <circle cx="64" cy="40" r="34" fill="black" />
+              </mask>
+            </defs>
+            <circle cx="50" cy="50" r="34" fill="#1e293b" opacity="0.06" />
+            <circle cx="50" cy="50" r="32" fill="url(#moonPlantSurface)" mask="url(#moonPlantMask)" />
+            <circle cx="34" cy="60" r="2.5" fill="#94a3b8" opacity="0.35" mask="url(#moonPlantMask)" />
+            <circle cx="42" cy="74" r="1.8" fill="#94a3b8" opacity="0.3" mask="url(#moonPlantMask)" />
+            <circle cx="28" cy="46" r="1.4" fill="#94a3b8" opacity="0.28" mask="url(#moonPlantMask)" />
+          </svg>
+        </div>
+        <style>{`
+          @keyframes weatherMoonSway  { 0%,100% { transform: rotate(-1.5deg) translateY(0); } 50% { transform: rotate(1.5deg) translateY(-2px); } }
+          @keyframes weatherMoonGlow  { 0%,100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+          @keyframes weatherStarTwinkle { 0%,100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+        `}</style>
       </div>
-      <div className="flex items-baseline gap-1.5 flex-wrap">
-        <span className={`${T.metricL} ${valColor}`}>{value}</span>
-        <span className={T.unit}>{unit}</span>
+    )
+  }
+
+  return (
+    <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: coreSize * 3.6,
+          height: coreSize * 3.6,
+          background: `radial-gradient(circle, rgba(225,113,0,${0.15 * intensityPct}) 0%, transparent 70%)`,
+          animation: intensityPct > 0.5 ? 'weatherSunPulse 3s ease-in-out infinite' : 'none',
+        }}
+      />
+      <svg
+        viewBox="0 0 160 160"
+        className="absolute inset-0 w-full h-full"
+        style={{ animation: `weatherSunRotate ${30 - intensityPct * 10}s linear infinite` }}
+      >
+        {[...Array(12)].map((_, i) => {
+          const angle = (i * 30 * Math.PI) / 180
+          const innerR = coreSize / 2 + 6
+          const outerR = innerR + rayLength
+          const x1 = 80 + innerR * Math.cos(angle)
+          const y1 = 80 + innerR * Math.sin(angle)
+          const x2 = 80 + outerR * Math.cos(angle)
+          const y2 = 80 + outerR * Math.sin(angle)
+          return (
+            <line
+              key={i}
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke="#e17100"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              opacity={rayOpacity}
+            />
+          )
+        })}
+      </svg>
+      <div
+        className="rounded-full flex items-center justify-center"
+        style={{
+          width: coreSize * 1.6,
+          height: coreSize * 1.6,
+          background: `radial-gradient(circle at 30% 30%, #f59e0b, #e17100)`,
+          boxShadow: `0 4px 24px rgba(225,113,0,${0.3 + intensityPct * 0.3})`,
+        }}
+      >
+        <Sun size={coreSize * 0.65} className="text-white" strokeWidth={1.5} />
       </div>
+      <style>{`
+        @keyframes weatherSunRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes weatherSunPulse  { 0%,100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+      `}</style>
     </div>
   )
+}
+
+
+function irradianceIntensity(w: number) {
+  if (w >= 800) return { label: 'Peak Sun', tone: 'text-[#e17100]', pct: Math.min(100, (w / 1200) * 100) }
+  if (w >= 500) return { label: 'Strong',   tone: 'text-[#e17100]', pct: (w / 1200) * 100 }
+  if (w >= 200) return { label: 'Moderate', tone: 'text-[#497d00]', pct: (w / 1200) * 100 }
+  if (w >  0)   return { label: 'Low',      tone: 'text-black',    pct: (w / 1200) * 100 }
+  return           { label: 'Night',      tone: 'text-black/50', pct: 0 }
 }
 
 // Icon button — used for expand/collapse, matches the DatePicker chrome
@@ -392,7 +534,14 @@ function PowerTrendCard({
                 tickFormatter={(v) => `${v}`}
               />
               <ChartTooltip
-                content={<ChartTooltipContent labelFormatter={(label) => formatMinutesTick(Number(label))} />}
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(_label, payload) => {
+                      const time = payload?.[0]?.payload?.time
+                      return typeof time === 'number' ? formatMinutesTick(time) : ''
+                    }}
+                  />
+                }
               />
               <Area
                 yAxisId="power"
@@ -421,17 +570,17 @@ function PowerTrendCard({
         </ChartContainer>
       )}
       {stats && (
-        <div className="flex flex-col gap-3 pt-4 pb-2 mt-2 border-t border-black/10">
+        <div className="flex flex-col gap-2 pt-3 pb-1 mt-2 border-t border-black/10">
           {/* Power row — label stacks above stats on mobile */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+          <div className="flex items-baseline gap-2 sm:gap-6 flex-wrap">
             <span className="text-[12px] text-[#e17100] uppercase tracking-[0.12em] font-semibold sm:w-24 shrink-0">
               Power
             </span>
-            <div className="flex items-center gap-5 flex-wrap">
-              {(['last', 'mean', 'max'] as const).map((k) => (
+            <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
+              {(['last','max'] as const).map((k) => (
                 <div key={k} className="flex items-baseline gap-1.5">
-                  <span className={T.eyebrow}>{k === 'mean' ? 'Avg' : k === 'max' ? 'Peak' : 'Last'}</span>
-                  <span className={`text-[15px] font-semibold tabular-nums ${k === 'max' ? 'text-[#e17100]' : 'text-black'}`}>
+                  <span className={T.eyebrow}>{k === 'max' ? 'Peak' : 'Last'}</span>
+                  <span className={`text-[12px] font-semibold tabular-nums ${k === 'max' ? 'text-[#e17100]' : 'text-black'}`}>
                     {stats.active_power_total_kw[k]}
                   </span>
                   <span className={T.unit}>kW</span>
@@ -440,15 +589,15 @@ function PowerTrendCard({
             </div>
           </div>
           {/* Irradiation row — same treatment */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+          <div className="flex items-baseline gap-2 sm:gap-6 flex-wrap">
             <span className="text-[12px] text-[#22C55E] uppercase tracking-[0.12em] font-semibold sm:w-24 shrink-0">
               Irradiation
             </span>
-            <div className="flex items-center gap-5 flex-wrap">
-              {(['last', 'mean', 'max'] as const).map((k) => (
+            <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
+              {(['last', 'max'] as const).map((k) => (
                 <div key={k} className="flex items-baseline gap-1.5">
-                  <span className={T.eyebrow}>{k === 'mean' ? 'Avg' : k === 'max' ? 'Peak' : 'Last'}</span>
-                  <span className={`text-[15px] font-semibold tabular-nums ${k === 'max' ? 'text-[#22C55E]' : 'text-black'}`}>
+                  <span className={T.eyebrow}>{k === 'max' ? 'Peak' : 'Last'}</span>
+                  <span className={`text-[12px] font-semibold tabular-nums ${k === 'max' ? 'text-[#22C55E]' : 'text-black'}`}>
                     {stats.irradiation_inclined_wm2[k]}
                   </span>
                   <span className={T.unit}>W/m²</span>
@@ -598,6 +747,25 @@ function DailyEnergyCard({
   chartData: { date: string; energy_kwh: number; fill: string }[]
   loading: boolean
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Track viewport for label sizing (SVG text can't use Tailwind breakpoints)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  // Auto-scroll to the end (today) once the chart has data / width to scroll
+  useEffect(() => {
+    if (loading || !scrollRef.current) return
+    const el = scrollRef.current
+    el.scrollLeft = el.scrollWidth
+  }, [loading, chartData])
+
   return (
     <div>
       <SectionHeader
@@ -610,48 +778,54 @@ function DailyEnergyCard({
           <p className={T.meta}>Loading chart…</p>
         </div>
       ) : (
-        <div className="h-[280px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 24, right: 20, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={formatDateTick}
-                tick={{ fontSize: 12, fill: '#171717' }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 12, fill: '#171717' }}
-                tickLine={false}
-                axisLine={false}
-                width={48}
-              />
-              <Tooltip
-                contentStyle={{
-                  fontSize: '13px', color: '#000', border: '1px solid #000',
-                  borderRadius: '8px', boxShadow: 'none', fontWeight: 500,
-                }}
-                labelFormatter={(label) => formatDateTick(String(label))}
-                formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'Energy']}
-              />
-              <Bar
-                dataKey="energy_kwh"
-                radius={[4, 4, 0, 0]}
-                shape={(props: any) => {
-                  const { x, y, width, height, payload } = props
-                  return <rect x={x} y={y} width={width} height={height} rx={4} ry={4} fill={payload.fill} />
-                }}
-              >
-                <LabelList
-                  dataKey="energy_kwh"
-                  position="top"
-                  formatter={(v) => `${Number(v).toLocaleString()}\u00A0kWh`}
-                  style={{ fontSize: 12, fill: '#171717', fontWeight: 600 }}
+        <div
+          ref={scrollRef}
+          className="h-[280px] w-full overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0"
+        >
+          <div className="h-full" style={{ width: `max(100%, ${chartData.length * 90}px)` }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 24, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDateTick}
+                  tick={{ fontSize: 12, fill: '#171717' }}
+                  tickLine={false}
+                  axisLine={false}
                 />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#171717' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                />
+                {/* <Tooltip
+                  cursor={false}
+                  contentStyle={{
+                    fontSize: '13px', color: '#000', border: '1px solid #000',
+                    borderRadius: '8px', boxShadow: 'none', fontWeight: 500,
+                  }}
+                  labelFormatter={(label) => formatDateTick(String(label))}
+                  formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'Energy']}
+                /> */}
+                <Bar
+                  dataKey="energy_kwh"
+                  radius={[4, 4, 0, 0]}
+                  shape={(props: any) => {
+                    const { x, y, width, height, payload } = props
+                    return <rect x={x} y={y} width={width} height={height} rx={4} ry={4} fill={payload.fill} />
+                  }}
+                >
+                  <LabelList
+                    dataKey="energy_kwh"
+                    position="top"
+                    formatter={(v) => `${Number(v).toLocaleString()}\u00A0kWh`}
+                    style={{ fontSize: isMobile ? 10 : 12, fill: '#171717', fontWeight: 600 }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>
@@ -688,6 +862,9 @@ export default function PlantOverviewPage() {
   const tempDelta = overview?.weather
     ? (overview.weather.module_temp_c - overview.weather.ambient_temp_c).toFixed(1)
     : null
+
+  const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0)
+
 
   useEffect(() => {
     if (!site?.id) return
@@ -740,9 +917,13 @@ export default function PlantOverviewPage() {
   }
 
   useEffect(() => {
+    if (!site?.id) {
+      setLoading(false)
+      return
+    }
     const fetchOverview = async () => {
       try {
-        const res = await api.get<PlantOverview>(`/influx/plant/overview/?site=${site?.id}`)
+        const res = await api.get<PlantOverview>(`/influx/plant/overview/?site=${site.id}`)
         res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
         setOverview(res.data)
       } catch (err) {
@@ -755,10 +936,11 @@ export default function PlantOverviewPage() {
   }, [site?.id, refreshTick])
 
   useEffect(() => {
+    if (!site?.id) return
     const fetchTrend = async () => {
       setTrendLoading(true)
       try {
-        const url = `/influx/plant/power-trend/?site=${site?.id}&date=${selectedDate}`
+        const url = `/influx/plant/power-trend/?site=${site.id}&date=${selectedDate}`
         const res = await api.get<PowerTrendData>(url)
         setTrend(res.data.data)
         setStats(res.data.stats)
@@ -769,7 +951,7 @@ export default function PlantOverviewPage() {
       }
     }
     fetchTrend()
-  }, [selectedDate])
+  }, [site?.id, selectedDate])
 
   useEffect(() => {
     if (!site?.id) return
@@ -869,21 +1051,20 @@ export default function PlantOverviewPage() {
 
         {/* Title block */}
         <div className="order-2 sm:order-1 min-w-0">
-          <div className="flex items-start gap-3">
-            <span className="w-1 h-8 rounded-full bg-[#e17100] mt-1.5 shrink-0" />
+          <div className="flex items-stretch gap-3">
+            <span className="w-1 rounded-full bg-[#e17100] shrink-0 self-stretch" />
             <div className="min-w-0">
-              <p className={T.eyebrow}>Plant Overview</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className={T.eyebrow}>Plant Overview</p>
+                <LiveDataIndicator lastUpdated={overview?.last_updated} />
+              </div>
               <h1 className={`${T.siteH1} mt-2 break-words`}>{overview?.site ?? '—'}</h1>
-              <p className={`${T.body} mt-1`}>
-                <span className="tabular-nums whitespace-nowrap">AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW</span>
-                <span className="mx-1 text-black">/</span>
-                <span className="tabular-nums whitespace-nowrap">DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW</span>
-              </p>
-              <div className="flex flex-wrap items-center gap-2 mt-4">
+              
+              <div className="flex flex-wrap items-center gap-2 mt-4 pl-4">
                 <StatusChip
                   label="Breaker"
-                  value={overview?.breaker_status ? overview.breaker_status.toUpperCase() : 'OFFLINE'}
-                  healthy={overview?.breaker_status ? overview.breaker_status === 'on' : null}
+                  value={overview?.breaker_status == null ? 'OFFLINE' : overview.breaker_status.toUpperCase()}
+                  healthy={overview?.breaker_status == null ? null : overview.breaker_status === 'on'}
                   icon={Power}
                 />
                 <StatusChip
@@ -898,54 +1079,105 @@ export default function PlantOverviewPage() {
         </div>
       </header>
 
+    
       {/* ============ HERO: Gauge + Energy Rail ============ */}
       <Divider />
-      <section className="pt-8 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-8 md:gap-16 items-center">
+      <section className="pt-10 pb-3">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-10 md:gap-16 items-center">
 
-          {/* Gauge column */}
-          <div className="flex flex-col items-center">
-            <p className={`${T.eyebrow} mb-3`}>Active Power</p>
-            <PowerGauge
-              value={overview?.plant.active_power_kw ?? 0}
-              capacity={overview?.plant.ac_capacity_kw ?? 1}
-            />
-            <div className="flex items-center gap-1.5 mt-3">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className={T.meta}>
-                <span className="tabular-nums font-semibold text-black">{capacityPct}%</span>
-                {' '}of {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW AC
-              </span>
-            </div>
-          </div>
+            {/* Gauge column — now sits on a soft tinted backdrop with capacity context above/below */}
+            <div className="flex flex-col items-center">
+              <div className="relative flex flex-col items-center px-8 py-8 rounded-3xl bg-gradient-to-b from-[#e17100]/[0.04] to-transparent w-full">
+                <p className={`${T.eyebrow} mb-4`}>Active Power</p>
+                <PowerGauge
+                  value={overview?.plant.active_power_kw ?? 0}
+                  capacity={overview?.plant.ac_capacity_kw ?? 1}
+                />
+                <div className="flex items-center gap-1.5 mt-4">
+                  <span className={`w-1.5 h-1.5 rounded-full ${overview?.last_updated ? 'bg-green-500 animate-pulse' : 'bg-black/30'}`} />
+                  <span className={T.meta}>
+                    <span className="tabular-nums font-semibold text-black">{capacityPct}%</span>
+                    {' '}of {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW AC
+                  </span>
+                </div>
 
-          {/* Energy rail — 3 stacked metrics divided by hairlines */}
-          <div className="flex flex-col">
-            <div className="flex items-baseline justify-between gap-3 py-3.5 border-b border-black/10">
-              <p className={`${T.eyebrow} min-w-0`}>Energy Today</p>
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={`${T.metricL} text-[#e17100]`}>
-                  {overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
-                </span>
-                <span className={T.unit}>kWh</span>
+                {/* DC capacity context — small footer stat tying gauge to DC rating */}
+                <div className="flex items-center gap-4 mt-5 pt-4 border-t border-black/10 w-full justify-center">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold text-black tabular-nums">
+                      {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'}
+                    </span>
+                    <span className="text-[11px] text-black/50">kW DC</span>
+                  </div>
+                  <span className="w-1 h-1 rounded-full bg-black/20" />
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold text-black tabular-nums">
+                      {overview && overview.plant.ac_capacity_kw
+                        ? (overview.plant.dc_capacity_kw / overview.plant.ac_capacity_kw).toFixed(2)
+                        : '—'}
+                    </span>
+                    <span className="text-[11px] text-black/50">DC/AC ratio</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex items-baseline justify-between gap-3 py-3.5 border-b border-black/10">
-              <p className={`${T.eyebrow} min-w-0`}>Energy Total</p>
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={T.metricL}>
-                  {overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
-                </span>
-                <span className={T.unit}>kWh</span>
+
+            {/* Energy rail — each metric now gets an icon, and a small descriptive
+                subtext to add substance beyond just a number */}
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between gap-4 py-5 border-b border-black/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#e17100]/10 flex items-center justify-center shrink-0">
+                    <Sun size={18} className="text-[#e17100]" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={T.eyebrow}>Energy Today</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Generated since morning</p>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className={`${T.metricL} text-[#e17100]`}>
+                    {overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
+                  </span>
+                  <span className={T.unit}>kWh</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-baseline justify-between gap-3 py-3.5">
-              <p className={`${T.eyebrow} min-w-0`}>CO₂ Avoided Today</p>
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={`${T.metricL} text-[#497d00]`}>
-                  {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
-                </span>
-                <span className={T.unit}>kg</span>
+
+              <div className="flex items-center justify-between gap-4 py-5 border-b border-black/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-black/5 flex items-center justify-center shrink-0">
+                    <TrendingUp size={18} className="text-black" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={T.eyebrow}>Energy Total</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Lifetime cumulative export</p>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className={T.metricL}>
+                    {overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
+                  </span>
+                  <span className={T.unit}>kWh</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 py-5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#497d00]/10 flex items-center justify-center shrink-0">
+                    <Leaf size={18} className="text-[#497d00]" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={T.eyebrow}>CO₂ Avoided Today</p>
+                    <p className="text-[12px] text-black/50 mt-0.5">Equivalent emissions offset</p>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className={`${T.metricL} text-[#497d00]`}>
+                    {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
+                  </span>
+                  <span className={T.unit}>kg</span>
+                </div>
               </div>
             </div>
           </div>
@@ -958,37 +1190,106 @@ export default function PlantOverviewPage() {
           <Divider />
           <Section>
             <SectionHeader title="Weather" meta="Live · on-site sensors" accent="orange" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 pb-3">
-              <WeatherCell
-                icon={Sun}
-                label="Irradiance"
-                value={overview.weather.irradiation_inclined_wm2}
-                unit="W/m²"
-                accent="orange"
-              />
-              <WeatherCell
-                icon={Thermometer}
-                label="Ambient Temp"
-                value={overview.weather.ambient_temp_c}
-                unit="°C"
-                accent="orange"
-              />
-              <WeatherCell
-                icon={Thermometer}
-                label="Module Temp"
-                value={overview.weather.module_temp_c}
-                unit="°C"
-                accent="orange"
-              />
-              {tempDelta && (
-                <div className="flex flex-col gap-1.5 min-w-0">
-                  <p className={T.eyebrow}>Module Δ</p>
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className={`${T.metricL} ${deltaColor}`}>{deltaSign}{tempDelta}</span>
-                    <span className={T.unit}>°C vs ambient</span>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8 item-start">
+
+              {/* Left: Sun + Irradiance — takes the majority width */}
+              <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 min-w-0 lg:pr-8 lg:border-r lg:border-black/10">
+                <div className="shrink-0 scale-[0.85] origin-center">
+                  <AnimatedSun irradiance={overview.weather.irradiation_inclined_wm2} />
+                </div>
+                <div className="flex flex-col gap-3 min-w-0 w-full">
+                  <div>
+                    <p className={T.eyebrow}>Solar Irradiance</p>
+                    <div className="flex items-baseline gap-2 mt-2">
+                      <span className={`${T.metricXL} ${weatherIntensity.tone}`}>
+                        {overview.weather.irradiation_inclined_wm2.toFixed(0)}
+                      </span>
+                      <span className={T.unit}>W/m²</span>
+                    </div>
+                    <p className={`text-[15px] font-semibold mt-1.5 ${weatherIntensity.tone}`}>
+                      {weatherIntensity.label}
+                    </p>
+                  </div>
+                  <div className="pt-1">
+                    <div className="h-2 bg-black/5 rounded-full overflow-hidden relative">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${weatherIntensity.pct}%`,
+                          background: 'linear-gradient(to right, #497d00 0%, #e17100 50%, #dc2626 100%)',
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1.5 text-[11px] text-black/50 tabular-nums">
+                      <span>0</span>
+                      <span>400</span>
+                      <span>800</span>
+                      <span>1200 W/m²</span>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Right: Temperature — condensed, self-contained column */}
+              <div className="flex flex-col gap-4 min-w-0">
+                <div>
+                  <p className={T.eyebrow}>Temperature</p>
+                  {tempDelta && (
+                    <p className={`text-[13px] font-semibold mt-1 ${deltaColor}`}>
+                      Module {deltaSign}{tempDelta}°C vs ambient
+                    </p>
+                  )}
+                </div>
+
+                {/* Module bar */}
+                <div>
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-[11px] text-black/50 font-medium uppercase tracking-wide">Module</span>
+                    <span className={`text-[14px] font-semibold tabular-nums text-[#e17100]`}>
+                      {overview.weather.module_temp_c.toFixed(1)}°C
+                    </span>
+                  </div>
+                  <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, ((overview.weather.module_temp_c - -10) / 90) * 100))}%`,
+                        background: TEMP_GRADIENT,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Ambient bar */}
+                <div>
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-[11px] text-black/50 font-medium uppercase tracking-wide">Ambient</span>
+                    <span className="text-[14px] font-semibold tabular-nums text-black">
+                      {overview.weather.ambient_temp_c.toFixed(1)}°C
+                    </span>
+                  </div>
+                  <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, ((overview.weather.ambient_temp_c - -10) / 90) * 100))}%`,
+                        background: TEMP_GRADIENT,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {tempDelta && (
+                  <p className="text-[12px] text-black/60 leading-snug pb-3">
+                    {deltaNum > 15 ? 'Modules running hot — high thermal loss expected.' :
+                    deltaNum > 8  ? 'Typical operating gap under sunlight.' :
+                    deltaNum > 0  ? 'Modules slightly warmer than ambient — normal for low sun.' :
+                    deltaNum < 0  ? 'Modules cooler than ambient — likely no sun or evening cooling.' :
+                                    'Modules at ambient temperature.'}
+                  </p>
+                )}
+              </div>
             </div>
           </Section>
         </>

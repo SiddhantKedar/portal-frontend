@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Sun, Thermometer, ThermometerSun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
+  Sun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
 } from 'lucide-react'
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart'
-import { GenerationCards } from '@/components/dashboard/GenerationCards'
 import { DatePicker } from '@/components/DatePicker'
 import {
   Area, XAxis, YAxis,
@@ -33,6 +32,9 @@ const T = {
   metricM:      'text-[15px] font-semibold text-black tabular-nums leading-none',
   unit:         'text-[13px] text-black font-medium',
 }
+
+const TEMP_GRADIENT =
+  'linear-gradient(to right, #6b7280 0%, #497d00 40%, #e17100 60%, #e17100 100%)'
 
 // ---- Types ----
 
@@ -255,30 +257,237 @@ function LiveDataIndicator({ lastUpdated }: { lastUpdated: string | null | undef
   )
 }
 
-// Weather cell — same visual weight as any other metric on the page
-function WeatherCell({
-  icon: Icon, label, value, unit, accent,
+// ============================================================
+// Performance comparison — zone bar (actual vs target)
+// ============================================================
+
+const PERF_COLORS = {
+  actual: '#e17100',
+  targeted: '#497d00',
+}
+
+function PerformanceZoneCard({
+  title, actual, targeted, formatValue,
 }: {
-  icon: React.ElementType
-  label: string
-  value: string | number
-  unit: string
-  accent?: 'orange' | 'olive'
+  title: string
+  actual: number
+  targeted: number
+  formatValue: (n: number) => string
 }) {
-  const iconColor = accent === 'orange' ? 'text-[#e17100]' : accent === 'olive' ? 'text-[#497d00]' : 'text-black'
-  const valColor  = accent === 'orange' ? 'text-[#e17100]' : accent === 'olive' ? 'text-[#497d00]' : ''
+  const max = Math.max(actual, targeted) * 1.2
+  const actualPct = Math.min(100, (actual / max) * 100)
+  const zone70 = ((targeted * 0.7) / max) * 100
+  const zone100 = (targeted / max) * 100
+
+  let status: string
+  let statusColor: string
+  if (actual >= targeted) { status = 'On target'; statusColor = PERF_COLORS.targeted }
+  else if (actual >= targeted * 0.9) { status = 'Near target'; statusColor = PERF_COLORS.actual }
+  else if (actual >= targeted * 0.7) { status = 'Behind'; statusColor = PERF_COLORS.actual }
+  else { status = 'Well behind'; statusColor = '#dc2626' }
+
   return (
-    <div className="flex flex-col items-center gap-1.5 min-w-0">
-      <div className="flex items-center justify-center gap-1.5">
-        <Icon size={14} className={`${iconColor} shrink-0`} strokeWidth={2} />
-        <p className={T.eyebrow}>{label}</p>
-      </div>
-      <div className="flex items-baseline justify-center gap-1.5 flex-wrap">
-        <span className={`${T.metricL} ${valColor}`}>{value}</span>
-        <span className={T.unit}>{unit}</span>
+    <div className="flex flex-col min-w-0">
+      <p className="text-[15px] font-semibold text-black tracking-tight leading-snug mb-4">{title}</p>
+      <div className="flex flex-col justify-center h-[200px] gap-4">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[26px] font-semibold text-black tracking-tight tabular-nums leading-none">
+            {formatValue(actual)}
+          </span>
+          <span className="text-[13px] font-semibold" style={{ color: statusColor }}>
+            {status}
+          </span>
+        </div>
+        <div className="relative h-6 rounded-md overflow-hidden">
+          {/* Zones background */}
+          <div className="absolute inset-0 flex">
+            <div style={{ width: `${zone70}%`, background: 'rgba(220,38,38,0.09)' }} />
+            <div style={{ width: `${zone100 - zone70}%`, background: 'rgba(225,113,0,0.10)' }} />
+            <div style={{ width: `${100 - zone100}%`, background: 'rgba(73,125,0,0.10)' }} />
+          </div>
+          {/* Actual fill */}
+          <div className="absolute inset-y-0 left-0" style={{ width: `${actualPct}%`, background: PERF_COLORS.actual }} />
+          {/* Target line at zone boundary */}
+          <div className="absolute inset-y-0 w-[2px] bg-black" style={{ left: `calc(${zone100}% - 1px)` }} />
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-black/50 font-medium">
+          <span>Behind · Near · On target</span>
+          <span>Target · {formatValue(targeted)}</span>
+        </div>
       </div>
     </div>
   )
+}
+
+function PerformanceCards({
+  actualToday, performanceRatio, cuf,
+}: {
+  actualToday: number
+  performanceRatio: number
+  cuf: number
+}) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-0 lg:divide-x lg:divide-black/15">
+      <div className="lg:pr-8 min-w-0">
+        <PerformanceZoneCard
+          title="Generation"
+          actual={actualToday}
+          targeted={5500}
+          formatValue={(n) => `${n.toLocaleString()}\u00A0kWh`}
+        />
+      </div>
+      <div className="lg:px-8 min-w-0">
+        <PerformanceZoneCard
+          title="Performance Ratio"
+          actual={performanceRatio}
+          targeted={79.4}
+          formatValue={(n) => `${n.toFixed(1)}%`}
+        />
+      </div>
+      <div className="lg:pl-8 min-w-0">
+        <PerformanceZoneCard
+          title="Capacity Utilisation Factor"
+          actual={cuf}
+          targeted={21.9}
+          formatValue={(n) => `${n.toFixed(1)}%`}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Animated Sun — the playful centerpiece, ported from WeatherPage.
+// Rays grow, brighten, and rotate based on irradiance.
+// At low irradiance it becomes a subtle moon + stars (night mode).
+// ============================================================
+function AnimatedSun({ irradiance }: { irradiance: number }) {
+  const isNight = irradiance <= 10
+  const intensityPct = Math.min(1, irradiance / 1000)
+  const rayLength = 8 + intensityPct * 10
+  const rayOpacity = 0.35 + intensityPct * 0.6
+  const coreSize = 32 + intensityPct * 6
+
+  if (isNight) {
+    const stars = [
+      { cx: 24, cy: 34, r: 1.8, delay: '0s' },
+      { cx: 136, cy: 28, r: 1.4, delay: '0.7s' },
+      { cx: 18, cy: 112, r: 1.5, delay: '1.4s' },
+      { cx: 142, cy: 104, r: 1.9, delay: '0.4s' },
+      { cx: 50, cy: 146, r: 1.3, delay: '1.8s' },
+      { cx: 116, cy: 140, r: 1.4, delay: '1.1s' },
+      { cx: 82, cy: 18, r: 1.2, delay: '2.1s' },
+      { cx: 8, cy: 72, r: 1.1, delay: '0.9s' },
+      { cx: 150, cy: 66, r: 1.2, delay: '1.6s' },
+    ]
+    return (
+      <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+        <div
+          className="absolute rounded-full"
+          style={{
+            width: 145, height: 145,
+            background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)',
+            animation: 'weatherMoonGlow 5s ease-in-out infinite',
+          }}
+        />
+        <svg viewBox="0 0 160 160" className="absolute inset-0 w-full h-full">
+          {stars.map((s, i) => (
+            <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill="#e2e8f0"
+              style={{ animation: `weatherStarTwinkle 3s ease-in-out ${s.delay} infinite`,
+                       transformOrigin: `${s.cx}px ${s.cy}px` }} />
+          ))}
+        </svg>
+        <div style={{ animation: 'weatherMoonSway 6s ease-in-out infinite', transformOrigin: 'center' }}>
+          <svg viewBox="0 0 100 100" width="90" height="90" style={{ transform: 'rotate(-18deg)' }}>
+            <defs>
+              <radialGradient id="moonPlantSurface" cx="30%" cy="30%" r="75%">
+                <stop offset="0%" stopColor="#f8fafc" />
+                <stop offset="70%" stopColor="#cbd5e1" />
+                <stop offset="100%" stopColor="#64748b" />
+              </radialGradient>
+              <mask id="moonPlantMask">
+                <rect width="100" height="100" fill="white" />
+                <circle cx="64" cy="40" r="34" fill="black" />
+              </mask>
+            </defs>
+            <circle cx="50" cy="50" r="34" fill="#1e293b" opacity="0.06" />
+            <circle cx="50" cy="50" r="32" fill="url(#moonPlantSurface)" mask="url(#moonPlantMask)" />
+            <circle cx="34" cy="60" r="2.5" fill="#94a3b8" opacity="0.35" mask="url(#moonPlantMask)" />
+            <circle cx="42" cy="74" r="1.8" fill="#94a3b8" opacity="0.3" mask="url(#moonPlantMask)" />
+            <circle cx="28" cy="46" r="1.4" fill="#94a3b8" opacity="0.28" mask="url(#moonPlantMask)" />
+          </svg>
+        </div>
+        <style>{`
+          @keyframes weatherMoonSway  { 0%,100% { transform: rotate(-1.5deg) translateY(0); } 50% { transform: rotate(1.5deg) translateY(-2px); } }
+          @keyframes weatherMoonGlow  { 0%,100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+          @keyframes weatherStarTwinkle { 0%,100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+        `}</style>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: coreSize * 3.6,
+          height: coreSize * 3.6,
+          background: `radial-gradient(circle, rgba(225,113,0,${0.15 * intensityPct}) 0%, transparent 70%)`,
+          animation: intensityPct > 0.5 ? 'weatherSunPulse 3s ease-in-out infinite' : 'none',
+        }}
+      />
+      <svg
+        viewBox="0 0 160 160"
+        className="absolute inset-0 w-full h-full"
+        style={{ animation: `weatherSunRotate ${30 - intensityPct * 10}s linear infinite` }}
+      >
+        {[...Array(12)].map((_, i) => {
+          const angle = (i * 30 * Math.PI) / 180
+          const innerR = coreSize / 2 + 6
+          const outerR = innerR + rayLength
+          const x1 = 80 + innerR * Math.cos(angle)
+          const y1 = 80 + innerR * Math.sin(angle)
+          const x2 = 80 + outerR * Math.cos(angle)
+          const y2 = 80 + outerR * Math.sin(angle)
+          return (
+            <line
+              key={i}
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke="#e17100"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              opacity={rayOpacity}
+            />
+          )
+        })}
+      </svg>
+      <div
+        className="rounded-full flex items-center justify-center"
+        style={{
+          width: coreSize * 1.6,
+          height: coreSize * 1.6,
+          background: `radial-gradient(circle at 30% 30%, #f59e0b, #e17100)`,
+          boxShadow: `0 4px 24px rgba(225,113,0,${0.3 + intensityPct * 0.3})`,
+        }}
+      >
+        <Sun size={coreSize * 0.65} className="text-white" strokeWidth={1.5} />
+      </div>
+      <style>{`
+        @keyframes weatherSunRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes weatherSunPulse  { 0%,100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+      `}</style>
+    </div>
+  )
+}
+
+
+function irradianceIntensity(w: number) {
+  if (w >= 800) return { label: 'Peak Sun', tone: 'text-[#e17100]', pct: Math.min(100, (w / 1200) * 100) }
+  if (w >= 500) return { label: 'Strong',   tone: 'text-[#e17100]', pct: (w / 1200) * 100 }
+  if (w >= 200) return { label: 'Moderate', tone: 'text-[#497d00]', pct: (w / 1200) * 100 }
+  if (w >  0)   return { label: 'Low',      tone: 'text-black',    pct: (w / 1200) * 100 }
+  return           { label: 'Night',      tone: 'text-black/50', pct: 0 }
 }
 
 // Icon button — used for expand/collapse, matches the DatePicker chrome
@@ -752,6 +961,9 @@ export default function PlantOverviewPage() {
     ? (overview.weather.module_temp_c - overview.weather.ambient_temp_c).toFixed(1)
     : null
 
+  const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0)
+
+
   useEffect(() => {
     if (!site?.id) return
     const fetchDailyEnergy = async () => {
@@ -945,11 +1157,7 @@ export default function PlantOverviewPage() {
                 <LiveDataIndicator lastUpdated={overview?.last_updated} />
               </div>
               <h1 className={`${T.siteH1} mt-2 break-words`}>{overview?.site ?? '—'}</h1>
-              <p className={`${T.body} mt-1`}>
-                <span className="tabular-nums whitespace-nowrap">AC {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW</span>
-                <span className="mx-1 text-black">/</span>
-                <span className="tabular-nums whitespace-nowrap">DC {overview?.plant.dc_capacity_kw?.toLocaleString() ?? '—'} kW</span>
-              </p>
+              
               <div className="flex flex-wrap items-center gap-2 mt-4 pl-4">
                 <StatusChip
                   label="Breaker"
@@ -1080,35 +1288,106 @@ export default function PlantOverviewPage() {
           <Divider />
           <Section>
             <SectionHeader title="Weather" meta="Live · on-site sensors" accent="orange" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 pb-3 justify-items-center text-center">
-              <WeatherCell
-                icon={Sun}
-                label="Irradiance"
-                value={overview.weather.irradiation_inclined_wm2}
-                unit="W/m²"
-                accent="orange"
-              />
-              <WeatherCell
-                icon={Thermometer}
-                label="Ambient Temp"
-                value={overview.weather.ambient_temp_c}
-                unit="°C"
-              />
-              <WeatherCell
-                icon={ThermometerSun}
-                label="Module Temp"
-                value={overview.weather.module_temp_c}
-                unit="°C"
-              />
-              {tempDelta && (
-                <div className="flex flex-col items-center gap-1.5 min-w-0">
-                  <p className={T.eyebrow}>Module Δ</p>
-                  <div className="flex items-baseline justify-center gap-1.5 flex-wrap">
-                    <span className={`${T.metricL} ${deltaColor}`}>{deltaSign}{tempDelta}</span>
-                    <span className={T.unit}>°C vs ambient</span>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8 item-start">
+
+              {/* Left: Sun + Irradiance — takes the majority width */}
+              <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 min-w-0 lg:pr-8 lg:border-r lg:border-black/10">
+                <div className="shrink-0 scale-[0.85] origin-center">
+                  <AnimatedSun irradiance={overview.weather.irradiation_inclined_wm2} />
+                </div>
+                <div className="flex flex-col gap-3 min-w-0 w-full">
+                  <div>
+                    <p className={T.eyebrow}>Solar Irradiance</p>
+                    <div className="flex items-baseline gap-2 mt-2">
+                      <span className={`${T.metricXL} ${weatherIntensity.tone}`}>
+                        {overview.weather.irradiation_inclined_wm2.toFixed(0)}
+                      </span>
+                      <span className={T.unit}>W/m²</span>
+                    </div>
+                    <p className={`text-[15px] font-semibold mt-1.5 ${weatherIntensity.tone}`}>
+                      {weatherIntensity.label}
+                    </p>
+                  </div>
+                  <div className="pt-1">
+                    <div className="h-2 bg-black/5 rounded-full overflow-hidden relative">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${weatherIntensity.pct}%`,
+                          background: 'linear-gradient(to right, #497d00 0%, #e17100 50%, #dc2626 100%)',
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1.5 text-[11px] text-black/50 tabular-nums">
+                      <span>0</span>
+                      <span>400</span>
+                      <span>800</span>
+                      <span>1200 W/m²</span>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Right: Temperature — condensed, self-contained column */}
+              <div className="flex flex-col gap-4 min-w-0">
+                <div>
+                  <p className={T.eyebrow}>Temperature</p>
+                  {tempDelta && (
+                    <p className={`text-[13px] font-semibold mt-1 ${deltaColor}`}>
+                      Module {deltaSign}{tempDelta}°C vs ambient
+                    </p>
+                  )}
+                </div>
+
+                {/* Module bar */}
+                <div>
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-[11px] text-black/50 font-medium uppercase tracking-wide">Module</span>
+                    <span className={`text-[14px] font-semibold tabular-nums text-[#e17100]`}>
+                      {overview.weather.module_temp_c.toFixed(1)}°C
+                    </span>
+                  </div>
+                  <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, ((overview.weather.module_temp_c - -10) / 90) * 100))}%`,
+                        background: TEMP_GRADIENT,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Ambient bar */}
+                <div>
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-[11px] text-black/50 font-medium uppercase tracking-wide">Ambient</span>
+                    <span className="text-[14px] font-semibold tabular-nums text-black">
+                      {overview.weather.ambient_temp_c.toFixed(1)}°C
+                    </span>
+                  </div>
+                  <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, ((overview.weather.ambient_temp_c - -10) / 90) * 100))}%`,
+                        background: TEMP_GRADIENT,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {tempDelta && (
+                  <p className="text-[12px] text-black/60 leading-snug pb-3">
+                    {deltaNum > 15 ? 'Modules running hot — high thermal loss expected.' :
+                    deltaNum > 8  ? 'Typical operating gap under sunlight.' :
+                    deltaNum > 0  ? 'Modules slightly warmer than ambient — normal for low sun.' :
+                    deltaNum < 0  ? 'Modules cooler than ambient — likely no sun or evening cooling.' :
+                                    'Modules at ambient temperature.'}
+                  </p>
+                )}
+              </div>
             </div>
           </Section>
         </>
@@ -1118,7 +1397,7 @@ export default function PlantOverviewPage() {
       <Divider />
       <Section>
         <SectionHeader title="Performance" meta="Today · Live" accent="orange" />
-        <GenerationCards
+        <PerformanceCards
           actualToday={overview?.plant.energy_today_kwh ?? 0}
           performanceRatio={overview?.performance?.performance_ratio_pct ?? 0}
           cuf={overview?.performance?.cuf_pct ?? 0}
