@@ -251,7 +251,6 @@ function RadialBarChartInline({
 
   const trackPath = arcPath(START, END, r)
   const valuePath = arcPath(START, sweepAngle, r)
-  const targetTick = polar(targetAngle, r)
   const targetTickInner = polar(targetAngle, r - strokeWidth / 2 - 4)
   const targetTickOuter = polar(targetAngle, r + strokeWidth / 2 + 4)
 
