@@ -573,7 +573,6 @@ export default function WeatherPage() {
       <Section>
         <SectionHeader
           title="Temperature"
-          meta={`Module ${deltaSign}${delta.toFixed(1)}°C vs ambient`}
           accent="orange"
         />
         <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-8 md:gap-12 items-center">
