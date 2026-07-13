@@ -14,6 +14,7 @@ import {
   SidebarMenuSubButton,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronRight } from 'lucide-react'
@@ -35,6 +36,12 @@ const SUB_INACTIVE = 'text-[12px]'
 export function AppSidebar() {
   const { devices } = useSite()
   const { user } = useAuth()
+  const { setOpenMobile, isMobile } = useSidebar()
+
+  // Close the sidebar on nav click, but only on mobile — desktop stays pinned open.
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
 
   const inverters = devices
     .filter((d) => d.device_type === 'INVERTER' && d.is_active)
@@ -75,6 +82,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to="/installer"
+                      onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
                       <Building2 size={16} />
@@ -100,6 +108,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/plant"
+                    onClick={closeOnMobile}
                     className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <Factory size={16} />
@@ -116,6 +125,7 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild className="flex-1">
                         <NavLink
                           to="/inverters"
+                          onClick={closeOnMobile}
                           className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                         >
                           <AudioWaveform size={16} />
@@ -140,6 +150,7 @@ export function AppSidebar() {
                             <SidebarMenuSubButton asChild>
                               <NavLink
                                 to={`/inverters/${inv.influx_device_id}`}
+                                onClick={closeOnMobile}
                                 className={({ isActive }) => (isActive ? SUB_ACTIVE : SUB_INACTIVE)}
                               >
                                 {inv.name}
@@ -158,6 +169,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/scb"
+                    onClick={closeOnMobile}
                     className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <GitMerge size={16} />
@@ -172,6 +184,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to="/meter"
+                      onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
                       <Gauge size={16} />
@@ -186,6 +199,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/analytics"
+                    onClick={closeOnMobile}
                     className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <LineChart size={16} />
@@ -199,6 +213,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/weather"
+                    onClick={closeOnMobile}
                     className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <CloudSun size={16} />
@@ -213,6 +228,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/health"
+                    onClick={closeOnMobile}
                     className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <Activity size={16} />
@@ -226,6 +242,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/alerts"
+                    onClick={closeOnMobile}
                     className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                   >
                     <AlertTriangle size={16} />
@@ -252,6 +269,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to="/users"
+                      onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
                       <LayoutDashboard size={16} />

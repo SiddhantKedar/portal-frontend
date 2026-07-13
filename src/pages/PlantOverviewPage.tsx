@@ -1117,7 +1117,7 @@ export default function PlantOverviewPage() {
     deltaNum < 0 ? 'text-black' : 'text-[#497d00]'
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-4 lg:px-2 xl:px-0 pb-10">
+    <div className="max-w-6xl px-0 mx-auto sm:px-6 md:px-4 lg:px-2 xl:px-0 pb-10">
 
       {/* ============ HEADER ============ */}
       {/* On mobile (order-1/2 flip): refresh row appears at the top with timestamp on the left,
