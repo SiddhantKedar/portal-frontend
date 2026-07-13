@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Sun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
@@ -16,7 +16,7 @@ import {
 } from 'recharts'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
-
+import { useAutoRefresh } from '@/api/useAutoRefresh'
 // ============================================================
 // TYPE SCALE — every text style on the page is one of these.
 // Keep the page disciplined: never freehand a text-[XXpx] outside this list.
@@ -950,9 +950,6 @@ export default function PlantOverviewPage() {
     new Set(['current', 'frequency'])
   )
 
-  const [refreshTick, setRefreshTick] = useState(0)
-  const lastActivity = useRef(Date.now())
-
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
   const [dailyEnergyLoading, setDailyEnergyLoading] = useState(false)
 
@@ -962,49 +959,6 @@ export default function PlantOverviewPage() {
 
   const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0)
 
-
-  useEffect(() => {
-    if (!site?.id) return
-    const fetchDailyEnergy = async () => {
-      setDailyEnergyLoading(true)
-      try {
-        const res = await api.get<DailyEnergyData>(
-          `/influx/dashboard/daily-energy/?site=${site.id}&days=7`
-        )
-        setDailyEnergy(res.data.data)
-      } catch {
-        setDailyEnergy([])
-      } finally {
-        setDailyEnergyLoading(false)
-      }
-    }
-    fetchDailyEnergy()
-  }, [site?.id, refreshTick])
-
-  useEffect(() => {
-    const updateActivity = () => { lastActivity.current = Date.now() }
-    window.addEventListener('mousemove', updateActivity)
-    window.addEventListener('keydown', updateActivity)
-    window.addEventListener('click', updateActivity)
-    return () => {
-      window.removeEventListener('mousemove', updateActivity)
-      window.removeEventListener('keydown', updateActivity)
-      window.removeEventListener('click', updateActivity)
-    }
-  }, [])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const idleMs = Date.now() - lastActivity.current
-      const isIdle = idleMs > 60_000
-      const isHidden = document.visibilityState !== 'visible'
-      if (!isIdle && !isHidden) {
-        setRefreshTick((t) => t + 1)
-      }
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [])
-
   function toggleElec(group: string) {
     setElecHidden((prev) => {
       const next = new Set(prev)
@@ -1013,60 +967,98 @@ export default function PlantOverviewPage() {
     })
   }
 
-  useEffect(() => {
-    if (!site?.id) {
-      setLoading(false)
-      return
-    }
-    const fetchOverview = async () => {
-      try {
-        const res = await api.get<PlantOverview>(`/influx/plant/overview/?site=${site.id}`)
-        res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
-        setOverview(res.data)
-      } catch (err) {
-        console.error('Plant overview error:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchOverview()
-  }, [site?.id, refreshTick])
+  // ============================================================
+  // Fetch functions — extracted into memoized callbacks so they can be
+  // called both by their own effect (on dep change) and by fetchAll
+  // (on wake / manual refresh). Each callback re-identifies only when
+  // its own deps change, so its useEffect below only fires then.
+  // ============================================================
 
-  useEffect(() => {
-    if (!site?.id) return
-    const fetchTrend = async () => {
-      setTrendLoading(true)
-      try {
-        const url = `/influx/plant/power-trend/?site=${site.id}&date=${selectedDate}`
-        const res = await api.get<PowerTrendData>(url)
-        setTrend(res.data.data)
-        setStats(res.data.stats)
-      } catch {
-        setTrend([])
-      } finally {
-        setTrendLoading(false)
-      }
+  const fetchOverview = useCallback(async () => {
+    if (!site?.id) { setLoading(false); return }
+    try {
+      const res = await api.get<PlantOverview>(`/influx/plant/overview/?site=${site.id}`)
+      res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
+      setOverview(res.data)
+    } catch (err) {
+      console.error('Plant overview error:', err)
+    } finally {
+      setLoading(false)
     }
-    fetchTrend()
+  }, [site?.id])
+
+  const fetchPowerTrend = useCallback(async () => {
+    if (!site?.id) return
+    setTrendLoading(true)
+    try {
+      const url = `/influx/plant/power-trend/?site=${site.id}&date=${selectedDate}`
+      const res = await api.get<PowerTrendData>(url)
+      setTrend(res.data.data)
+      setStats(res.data.stats)
+    } catch {
+      setTrend([])
+    } finally {
+      setTrendLoading(false)
+    }
   }, [site?.id, selectedDate])
 
-  useEffect(() => {
+  const fetchDailyEnergy = useCallback(async () => {
     if (!site?.id) return
-    const fetchElec = async () => {
-      setElecTrendLoading(true)
-      try {
-        const res = await api.get<ElecTrendData>(
-          `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
-        )
-        setElecTrend(res.data.data)
-      } catch {
-        setElecTrend([])
-      } finally {
-        setElecTrendLoading(false)
-      }
+    setDailyEnergyLoading(true)
+    try {
+      const res = await api.get<DailyEnergyData>(
+        `/influx/dashboard/daily-energy/?site=${site.id}&days=7`
+      )
+      setDailyEnergy(res.data.data)
+    } catch {
+      setDailyEnergy([])
+    } finally {
+      setDailyEnergyLoading(false)
     }
-    fetchElec()
+  }, [site?.id])
+
+  const fetchElecTrend = useCallback(async () => {
+    if (!site?.id) return
+    setElecTrendLoading(true)
+    try {
+      const res = await api.get<ElecTrendData>(
+        `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
+      )
+      setElecTrend(res.data.data)
+    } catch {
+      setElecTrend([])
+    } finally {
+      setElecTrendLoading(false)
+    }
   }, [site?.id, elecSelectedDate])
+
+  // Initial + dep-change fetches. Each effect fires when its fetcher's identity changes,
+  // which happens when site.id or the relevant selected date changes.
+  useEffect(() => { fetchOverview() }, [fetchOverview])
+  useEffect(() => { fetchPowerTrend() }, [fetchPowerTrend])
+  useEffect(() => { fetchDailyEnergy() }, [fetchDailyEnergy])
+  useEffect(() => { fetchElecTrend() }, [fetchElecTrend])
+
+  // Full refresh — used for wake events and the manual Refresh button.
+  const fetchAll = useCallback(async () => {
+    await Promise.all([
+      fetchOverview(),
+      fetchPowerTrend(),
+      fetchDailyEnergy(),
+      fetchElecTrend(),
+    ])
+  }, [fetchOverview, fetchPowerTrend, fetchDailyEnergy, fetchElecTrend])
+
+  // Auto-refresh strategy:
+  //   Interval (60s): only /overview/ — the lightweight snapshot.
+  //   Wake events (visibility, focus, pageshow, online): full refresh via fetchAll.
+  //   Manual refresh button: full refresh via fetchAll (bypasses throttle).
+  // Heavy queries (power/daily/elec) never run on the interval, so they don't
+  // burn API calls while someone is looking at yesterday's graph.
+  const { refetch, isRefetching } = useAutoRefresh(fetchOverview, {
+    intervalMs: 60_000,
+    onWake: fetchAll,
+  })
 
   const chartData = trend.map((p) => ({
     time: minutesSinceMidnight(p.time),
@@ -1117,7 +1109,7 @@ export default function PlantOverviewPage() {
     deltaNum < 0 ? 'text-black' : 'text-[#497d00]'
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-4 lg:px-2 xl:px-0 pb-10">
+    <div className="max-w-6xl px-0 mx-auto sm:px-6 md:px-4 lg:px-2 xl:px-0 pb-10">
 
       {/* ============ HEADER ============ */}
       {/* On mobile (order-1/2 flip): refresh row appears at the top with timestamp on the left,
@@ -1138,7 +1130,8 @@ export default function PlantOverviewPage() {
             </p>
           <button
             type="button"
-            onClick={() => setRefreshTick((t) => t + 1)}
+            onClick={refetch}
+            disabled={isRefetching}
             className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold order-1 sm:order-1"
           >
             <RefreshCw size={14} strokeWidth={2} />
