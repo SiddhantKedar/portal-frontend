@@ -408,7 +408,7 @@ export default function MeterOverviewPage() {
     .at(-1)
 
   return (
-    <div className="w-full max-w-[1152px] mx-auto px-4 sm:px-6 md:px-6 lg:px-6 pb-10">
+    <div className="w-full max-w-[1152px] mx-auto px-0 sm:px-6 md:px-6 lg:px-6 pb-10">
 
       {/* ============ HEADER ============ */}
       <header className="pb-5 flex flex-col md:flex-row md:items-start md:justify-between md:flex-wrap gap-3 md:gap-6">

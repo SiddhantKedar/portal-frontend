@@ -218,7 +218,7 @@ function LossTag({ a, b, txt, dy = 14 }: { a: [number, number]; b: [number, numb
 // ============================================================
 export default function EnergyFlowPage() {
   return (
-    <div className="min-h-screen text-black px-4 sm:px-8 py-8" style={{ background: INK }}>
+    <div className="min-h-screen text-black px-0 sm:px-8 py-8" style={{ background: INK }}>
       <style>{`
         @keyframes flowDash { to { stroke-dashoffset: -36; } }
         .flow-spine { animation: flowDash 1.3s linear infinite; }
