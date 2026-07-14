@@ -306,7 +306,28 @@ function PerformanceZoneCard({
             <div style={{ width: `${100 - zone100}%`, background: 'rgba(73,125,0,0.10)' }} />
           </div>
           {/* Actual fill */}
-          <div className="absolute inset-y-0 left-0" style={{ width: `${actualPct}%`, background: PERF_COLORS.actual }} />
+          {/* Actual fill — orange up to target, green for the overshoot beyond target */}
+          {actual >= targeted ? (
+            <>
+              <div
+                className="absolute inset-y-0 left-0"
+                style={{ width: `${zone100}%`, background: PERF_COLORS.actual }}
+              />
+              <div
+                className="absolute inset-y-0"
+                style={{
+                  left: `${zone100}%`,
+                  width: `${actualPct - zone100}%`,
+                  background: PERF_COLORS.targeted,
+                }}
+              />
+            </>
+          ) : (
+            <div
+              className="absolute inset-y-0 left-0"
+              style={{ width: `${actualPct}%`, background: PERF_COLORS.actual }}
+            />
+          )}
           {/* Target line at zone boundary */}
           <div className="absolute inset-y-0 w-[2px] bg-black" style={{ left: `calc(${zone100}% - 1px)` }} />
         </div>
