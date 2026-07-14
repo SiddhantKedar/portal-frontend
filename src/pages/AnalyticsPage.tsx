@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, X, Plus, Loader2, RefreshCw, Clock } from 'lucide-react'
+import { ChevronDown, X, Plus, Loader2, RefreshCw} from 'lucide-react'
 import {
   ChartContainer,
   ChartTooltip,
