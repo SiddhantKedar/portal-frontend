@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import {
@@ -17,6 +17,7 @@ import { format } from 'date-fns'
 import { DatePicker } from '@/components/DatePicker'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
+import { useAutoRefresh } from '@/api/useAutoRefresh'
 
 // ============================================================
 // TYPE SCALE — matches Plant/Meter/Inverter Overview. Keep in sync.
@@ -501,9 +502,6 @@ export default function InverterDetailPage() {
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
   const [dailyLoading, setDailyLoading] = useState(true)
 
-  const [refreshTick, setRefreshTick] = useState(0)
-  const lastActivity = useRef(Date.now())
-
   function toggleSeries(key: string) {
     setHiddenSeries((prev) => {
       const next = new Set(prev)
@@ -516,86 +514,66 @@ export default function InverterDetailPage() {
     })
   }
 
-  // Activity tracking for auto-refresh backoff — identical to other Overview pages
-  useEffect(() => {
-    const updateActivity = () => { lastActivity.current = Date.now() }
-    window.addEventListener('mousemove', updateActivity)
-    window.addEventListener('keydown', updateActivity)
-    window.addEventListener('click', updateActivity)
-    return () => {
-      window.removeEventListener('mousemove', updateActivity)
-      window.removeEventListener('keydown', updateActivity)
-      window.removeEventListener('click', updateActivity)
+
+  const fetchDetail = useCallback(async () => {
+    if (!site?.id || !device?.id) { setLoading(false); return }
+    try {
+      const res = await api.get<InverterDetail>(
+        `/influx/inverter/detail/?site=${site.id}&device=${device.id}`
+      )
+      setDetail(res.data)
+    } catch (err) {
+      console.error('Inverter detail error:', err)
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }, [site?.id, device?.id])
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const idleMs = Date.now() - lastActivity.current
-      const isIdle = idleMs > 60_000
-      const isHidden = document.visibilityState !== 'visible'
-      if (!isIdle && !isHidden) {
-        setRefreshTick((t) => t + 1)
-      }
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Live snapshot
-  useEffect(() => {
+  const fetchTrend = useCallback(async () => {
     if (!site?.id || !device?.id) return
-    const fetchDetail = async () => {
-      try {
-        const res = await api.get<InverterDetail>(
-          `/influx/inverter/detail/?site=${site.id}&device=${device.id}`
-        )
-        setDetail(res.data)
-      } catch (err) {
-        console.error('Inverter detail error:', err)
-      } finally {
-        setLoading(false)
-      }
+    setTrendLoading(true)
+    try {
+      const res = await api.get<TrendData>(
+        `/influx/inverter/detail/power-trend/?site=${site.id}&device=${device.id}&date=${selectedDate}&interval=5`
+      )
+      setTrend(res.data.data)
+    } catch {
+      setTrend([])
+    } finally {
+      setTrendLoading(false)
     }
-    fetchDetail()
-  }, [site?.id, device?.id, refreshTick])
-
-  // Power trend
-  useEffect(() => {
-    if (!site?.id || !device?.id) return
-    const fetchTrend = async () => {
-      setTrendLoading(true)
-      try {
-        const res = await api.get<TrendData>(
-          `/influx/inverter/detail/power-trend/?site=${site.id}&device=${device.id}&date=${selectedDate}&interval=5`
-        )
-        setTrend(res.data.data)
-      } catch {
-        setTrend([])
-      } finally {
-        setTrendLoading(false)
-      }
-    }
-    fetchTrend()
   }, [site?.id, device?.id, selectedDate])
 
-  // Daily energy
-  useEffect(() => {
+  const fetchDailyEnergy = useCallback(async () => {
     if (!site?.id || !device?.id) return
-    const fetchDailyEnergy = async () => {
-      setDailyLoading(true)
-      try {
-        const res = await api.get<DailyEnergyData>(
-          `/influx/inverter/detail/daily-energy/?site=${site.id}&device=${device.id}&days=7`
-        )
-        setDailyEnergy(dedupeDailyEnergy(res.data.data))
-      } catch {
-        setDailyEnergy([])
-      } finally {
-        setDailyLoading(false)
-      }
+    setDailyLoading(true)
+    try {
+      const res = await api.get<DailyEnergyData>(
+        `/influx/inverter/detail/daily-energy/?site=${site.id}&device=${device.id}&days=7`
+      )
+      setDailyEnergy(dedupeDailyEnergy(res.data.data))
+    } catch {
+      setDailyEnergy([])
+    } finally {
+      setDailyLoading(false)
     }
-    fetchDailyEnergy()
-  }, [site?.id, device?.id, refreshTick])
+  }, [site?.id, device?.id])
+
+  useEffect(() => { fetchDetail() }, [fetchDetail])
+  useEffect(() => { fetchTrend() }, [fetchTrend])
+  useEffect(() => { fetchDailyEnergy() }, [fetchDailyEnergy])
+
+  // Full refresh — wake events + manual Refresh button.
+  const fetchAll = useCallback(async () => {
+    await Promise.all([fetchDetail(), fetchTrend(), fetchDailyEnergy()])
+  }, [fetchDetail, fetchTrend, fetchDailyEnergy])
+
+  // Interval (60s): detail snapshot only. Wake events (visibility/focus/pageshow/online)
+  // and manual refresh: full refresh via fetchAll.
+  const { refetch, isRefetching } = useAutoRefresh(fetchDetail, {
+    intervalMs: 60_000,
+    onWake: fetchAll,
+  })
 
   const trendChartData = useMemo(
     () =>
@@ -666,7 +644,8 @@ export default function InverterDetailPage() {
           </p>
           <button
             type="button"
-            onClick={() => setRefreshTick((t) => t + 1)}
+            onClick={refetch}
+            disabled={isRefetching}
             className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold"
           >
             <RefreshCw size={14} strokeWidth={2} />

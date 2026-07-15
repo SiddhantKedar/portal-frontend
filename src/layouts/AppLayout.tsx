@@ -23,11 +23,11 @@ export default function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="h-svh overflow-hidden">
         <Topbar />
 
-        {/* Page content */}
-        <main className="flex-1 bg-white p-6">
+        {/* Page content — this is the scrollable region, not the window */}
+        <main className="flex-1 overflow-y-auto bg-white p-6">
           <Outlet />
         </main>
 
@@ -65,8 +65,8 @@ function Topbar() {
   }
 
   return (
-    <header className="flex h-14 items-center gap-4 border-b border-black/15 bg-white px-6">
-      <SidebarTrigger className="text-black" />
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-4 border-b border-black/15 bg-white px-6">
+      <SidebarTrigger className="text-black hover:text-[#e17100]" />
 
       {!sidebarShowingLogo && (
         <div className="flex items-center gap-2.5">
