@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Sun, Gauge, CloudRain, Droplets, Clock, RefreshCw,
 } from 'lucide-react'
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
+import { useAutoRefresh } from '@/api/useAutoRefresh'
 
 // ============================================================
 // TYPE SCALE — matches Plant/Meter/Inverter Overview. Keep in sync.
@@ -45,6 +46,15 @@ interface WeatherData {
 function formatLastUpdated(iso: string) {
   const d = new Date(iso)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+// Clock-based night check (local / IST). Used so a dead or offline station
+// reading 0 W/m² during the day isn't mistaken for night and rendered as a moon.
+// Conservative window (night = before 6am or 7pm onward) biases toward showing
+// the sun, since a false moon in daylight is the worse error.
+function isNightNow() {
+  const h = new Date().getHours()
+  return h < 6 || h >= 19
 }
 
 function compassLabel(deg: number) {
@@ -124,10 +134,13 @@ function StatusChip({ status }: { status: string }) {
 // ============================================================
 // Animated Sun — the playful centerpiece.
 // Rays grow, brighten, and rotate based on irradiance.
-// At 0 W/m² it becomes a subtle moon (night mode).
+// At genuine night (clock-based + low irradiance) it becomes a subtle moon.
 // ============================================================
 function AnimatedSun({ irradiance }: { irradiance: number }) {
-  const isNight = irradiance <= 10
+  // Only render the moon when BOTH the clock says it's night AND irradiance is
+  // low. This prevents an offline/dead station (which reports 0 W/m²) from
+  // showing a moon in the middle of the day.
+  const isNight = irradiance <= 10 && isNightNow()
   const intensityPct = Math.min(1, irradiance / 1000)
   // Rays extend further and get warmer with higher irradiance
   const rayLength = 8 + intensityPct * 10
@@ -424,47 +437,27 @@ export default function WeatherPage() {
   const [data, setData] = useState<WeatherData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const [refreshTick, setRefreshTick] = useState(0)
-  const lastActivity = useRef(Date.now())
-
-  useEffect(() => {
-    const updateActivity = () => { lastActivity.current = Date.now() }
-    window.addEventListener('mousemove', updateActivity)
-    window.addEventListener('keydown', updateActivity)
-    window.addEventListener('click', updateActivity)
-    return () => {
-      window.removeEventListener('mousemove', updateActivity)
-      window.removeEventListener('keydown', updateActivity)
-      window.removeEventListener('click', updateActivity)
+  const fetchWeather = useCallback(async () => {
+    if (!site?.id) { setLoading(false); return }
+    try {
+      const res = await api.get<WeatherData>(`/influx/weather/?site=${site.id}`)
+      setData(res.data)
+    } catch (err) {
+      console.error('Weather error:', err)
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }, [site?.id])
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const idleMs = Date.now() - lastActivity.current
-      const isIdle = idleMs > 60_000
-      const isHidden = document.visibilityState !== 'visible'
-      if (!isIdle && !isHidden) {
-        setRefreshTick((t) => t + 1)
-      }
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [])
+  useEffect(() => { fetchWeather() }, [fetchWeather])
 
-  useEffect(() => {
-    if (!site?.id) return
-    const fetchWeather = async () => {
-      try {
-        const res = await api.get<WeatherData>(`/influx/weather/?site=${site.id}`)
-        setData(res.data)
-      } catch (err) {
-        console.error('Weather error:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchWeather()
-  }, [site?.id, refreshTick])
+  // Single endpoint on this page, so the 60s interval, wake events
+  // (visibility/focus/pageshow/online) and the manual button all pull the
+  // same weather snapshot.
+  const { refetch, isRefetching } = useAutoRefresh(fetchWeather, {
+    intervalMs: 60_000,
+    onWake: fetchWeather,
+  })
 
   if (loading) {
     return (
@@ -500,7 +493,8 @@ export default function WeatherPage() {
           </p>
           <button
             type="button"
-            onClick={() => setRefreshTick((t) => t + 1)}
+            onClick={refetch}
+            disabled={isRefetching}
             className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold"
           >
             <RefreshCw size={14} strokeWidth={2} />

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, Fragment } from 'react'
+import { useCallback, useEffect, useState, Fragment } from 'react'
 import { Clock, Zap, TrendingUp, Gauge, Activity, RefreshCw, Sun } from 'lucide-react'
 
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
+import { useAutoRefresh } from '@/api/useAutoRefresh'
 
 // ============================================================
 // TYPE SCALE — matches PlantOverviewPage.tsx exactly. Keep in sync.
@@ -337,49 +338,27 @@ export default function MeterOverviewPage() {
   const { site } = useSite()
   const [data, setData] = useState<MeterOverviewData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [refreshTick, setRefreshTick] = useState(0)
-  const lastActivity = useRef(Date.now())
 
-  // Track user activity so auto-refresh backs off when the tab is idle/hidden —
-  // identical pattern to PlantOverviewPage's 60s polling.
-  useEffect(() => {
-    const updateActivity = () => { lastActivity.current = Date.now() }
-    window.addEventListener('mousemove', updateActivity)
-    window.addEventListener('keydown', updateActivity)
-    window.addEventListener('click', updateActivity)
-    return () => {
-      window.removeEventListener('mousemove', updateActivity)
-      window.removeEventListener('keydown', updateActivity)
-      window.removeEventListener('click', updateActivity)
+  const fetchMeters = useCallback(async () => {
+    if (!site?.id) { setLoading(false); return }
+    try {
+      const res = await api.get<MeterOverviewData>(`/influx/meter/overview/?site=${site.id}`)
+      setData(res.data)
+    } catch (err) {
+      console.error('Meter overview error:', err)
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }, [site?.id])
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const idleMs = Date.now() - lastActivity.current
-      const isIdle = idleMs > 60_000
-      const isHidden = document.visibilityState !== 'visible'
-      if (!isIdle && !isHidden) {
-        setRefreshTick((t) => t + 1)
-      }
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [])
+  useEffect(() => { fetchMeters() }, [fetchMeters])
 
-  useEffect(() => {
-    if (!site?.id) return
-    const fetchMeters = async () => {
-      try {
-        const res = await api.get<MeterOverviewData>(`/influx/meter/overview/?site=${site.id}`)
-        setData(res.data)
-      } catch (err) {
-        console.error('Meter overview error:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchMeters()
-  }, [site?.id, refreshTick])
+  // Interval (60s) + wake events (visibility/focus/pageshow/online) + manual
+  // refresh all pull the same overview snapshot — no heavy trend queries here.
+  const { refetch, isRefetching } = useAutoRefresh(fetchMeters, {
+    intervalMs: 60_000,
+    onWake: fetchMeters,
+  })
 
   if (loading) {
     return (
@@ -427,7 +406,8 @@ export default function MeterOverviewPage() {
           </p>
           <button
             type="button"
-            onClick={() => setRefreshTick((t) => t + 1)}
+            onClick={refetch}
+            disabled={isRefetching}
             className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold"
           >
             <RefreshCw size={14} strokeWidth={2} />

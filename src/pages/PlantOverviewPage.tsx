@@ -171,12 +171,13 @@ function formatDateTick(dateStr: string) {
 // Section header: colored accent bar + title + optional meta + optional right-side actions.
 // On mobile: actions wrap to a second row aligned right (via ml-auto).
 function SectionHeader({
-  title, meta, accent = 'orange', actions,
+  title, meta, accent = 'orange', actions, status,
 }: {
   title: string
   meta?: string
   accent?: 'orange' | 'olive' | 'none'
   actions?: React.ReactNode
+  status?: { label: string; online: boolean }
 }) {
   const bar =
     accent === 'orange' ? 'bg-[#e17100]' :
@@ -189,7 +190,20 @@ function SectionHeader({
         )}
         <div className="min-w-0">
           <h2 className={T.sectionTitle}>{title}</h2>
-          {meta && <p className={`${T.meta} mt-1`}>{meta}</p>}
+          <div className="flex items-center gap-2 mt-1">
+            {meta && <p className={T.meta}>{meta}</p>}
+            {status && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ background: status.online ? '#497d00' : '#dc2626' }}
+                />
+                <span style={{ color: status.online ? '#497d00' : '#dc2626' }}>
+                  {status.label}
+                </span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
       {actions && (
@@ -198,7 +212,6 @@ function SectionHeader({
     </div>
   )
 }
-
 // A page-wide horizontal divider used between sections
 function Divider() {
   return <div className="h-px w-full bg-black/15" />
@@ -381,12 +394,40 @@ function PerformanceCards({
 // Rays grow, brighten, and rotate based on irradiance.
 // At low irradiance it becomes a subtle moon + stars (night mode).
 // ============================================================
-function AnimatedSun({ irradiance }: { irradiance: number }) {
+function AnimatedSun({ irradiance, isOffline = false }: { irradiance: number; isOffline?: boolean }) {
   const isNight = irradiance <= 10
   const intensityPct = Math.min(1, irradiance / 1000)
   const rayLength = 8 + intensityPct * 10
   const rayOpacity = 0.35 + intensityPct * 0.6
   const coreSize = 32 + intensityPct * 6
+
+  if (isOffline) {
+    return (
+      <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+        <svg viewBox="0 0 160 160" className="absolute inset-0 w-full h-full">
+          {[...Array(12)].map((_, i) => {
+            const angle = (i * 30 * Math.PI) / 180
+            const innerR = 32 / 2 + 6
+            const outerR = innerR + 8
+            const x1 = 80 + innerR * Math.cos(angle)
+            const y1 = 80 + innerR * Math.sin(angle)
+            const x2 = 80 + outerR * Math.cos(angle)
+            const y2 = 80 + outerR * Math.sin(angle)
+            return (
+              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="#D4D4D4" strokeWidth={2.5} strokeLinecap="round" />
+            )
+          })}
+        </svg>
+        <div
+          className="rounded-full flex items-center justify-center"
+          style={{ width: 32 * 1.6, height: 32 * 1.6, background: '#E5E5E5' }}
+        >
+          <Sun size={32 * 0.65} className="text-black/30" strokeWidth={1.5} />
+        </div>
+      </div>
+    )
+  }
 
   if (isNight) {
     const stars = [
@@ -502,7 +543,8 @@ function AnimatedSun({ irradiance }: { irradiance: number }) {
 }
 
 
-function irradianceIntensity(w: number) {
+function irradianceIntensity(w: number, isOffline = false) {
+  if (isOffline) return { label: 'Offline', tone: 'text-black/30', pct: 0 }
   if (w >= 800) return { label: 'Peak Sun', tone: 'text-[#e17100]', pct: Math.min(100, (w / 1200) * 100) }
   if (w >= 500) return { label: 'Strong',   tone: 'text-[#e17100]', pct: (w / 1200) * 100 }
   if (w >= 200) return { label: 'Moderate', tone: 'text-[#497d00]', pct: (w / 1200) * 100 }
@@ -978,7 +1020,8 @@ export default function PlantOverviewPage() {
     ? (overview.weather.module_temp_c - overview.weather.ambient_temp_c).toFixed(1)
     : null
 
-  const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0)
+  const weatherOffline = overview?.weather?.status === 'offline'
+  const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0, weatherOffline)
 
   function toggleElec(group: string) {
     setElecHidden((prev) => {
@@ -1300,14 +1343,22 @@ export default function PlantOverviewPage() {
         <>
           <Divider />
           <Section>
-            <SectionHeader title="Weather" meta="Live · on-site sensors" accent="orange" />
+              <SectionHeader
+                title="Weather"
+                meta="On-site sensors"
+                accent="orange"
+                status={{ label: weatherOffline ? 'Offline' : 'Live', online: !weatherOffline }}
+              />
 
             <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8 item-start">
 
               {/* Left: Sun + Irradiance — takes the majority width */}
               <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 min-w-0 lg:pr-8 lg:border-r lg:border-black/10">
                 <div className="shrink-0 scale-[0.85] origin-center">
-                  <AnimatedSun irradiance={overview.weather.irradiation_inclined_wm2} />
+                  <AnimatedSun
+                      irradiance={overview.weather.irradiation_inclined_wm2}
+                      isOffline={weatherOffline}
+                    />
                 </div>
                 <div className="flex flex-col gap-3 min-w-0 w-full">
                   <div>

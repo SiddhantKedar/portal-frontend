@@ -24,7 +24,7 @@ export default function LoginPage() {
       const response = await api.post<LoginResponse>('/auth/login/', { email, password })
       const { access, refresh, user } = response.data
       login(access, refresh, user)
-      navigate('/plant')
+      navigate(user.role === 'INSTALLER' ? '/installer' : '/plant')
     } catch (err: any) {
       setError('Invalid email or password. Please try again.')
     } finally {
