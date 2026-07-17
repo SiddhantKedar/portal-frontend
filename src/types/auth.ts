@@ -5,8 +5,7 @@ export interface User {
   last_name: string
   full_name: string
   role: 'ADMIN' | 'INSTALLER' | 'CUSTOMER'
-  installer: number | null
-  installer_name: string | null
+  installers: { id: number; name: string }[]
   customer_id: number | null
   customer_name: string | null
   is_active: boolean
