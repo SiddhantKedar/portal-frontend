@@ -602,7 +602,7 @@ function PowerGauge({
         </RadialBarChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className={`${T.metricXL} text-[#e17100]`}>{value.toLocaleString()}</span>
+        <span className={`${T.metricXL} text-[#e17100]`}>{Math.max(0, value).toLocaleString()}</span>
         <span className={`${T.unit} mt-1.5`}>kW</span>
       </div>
     </div>
