@@ -69,13 +69,13 @@ export default function UserPage() {
         <div className="px-6 divide-y divide-black/10">
           <InfoRow icon={<Mail size={16} className="text-black/60" />} label="Email" value={user.email} />
 
-          {showInstaller && (
+            {showInstaller && (
             <InfoRow
-              icon={<Building2 size={16} className="text-black/60" />}
-              label="Installer"
-              value={user.installer_name ?? '—'}
+                icon={<Building2 size={16} className="text-black/60" />}
+                label={user.installers.length > 1 ? 'Installers' : 'Installer'}
+                value={user.installers.length > 0 ? user.installers.map((i) => i.name).join(', ') : '—'}
             />
-          )}
+            )}
 
           {showCustomer && (
             <InfoRow

@@ -34,14 +34,14 @@ const T = {
 interface InverterData {
   device_id: string
   name: string
-  ac_active_power_kw: number
-  energy_daily_kwh: number
-  energy_total_kwh: number
-  ac_reactive_power_kvar: number
-  ac_power_factor: number
-  grid_frequency_hz: number
-  inverter_efficiency_pct: number
-  performance_ratio_pct: number
+  ac_active_power_kw: number | null
+  energy_daily_kwh: number | null
+  energy_total_kwh: number | null
+  ac_reactive_power_kvar: number | null
+  ac_power_factor: number | null
+  grid_frequency_hz: number | null
+  inverter_efficiency_pct: number | null
+  performance_ratio_pct: number | null
   status: string
   last_updated: string
 }
@@ -170,19 +170,20 @@ function InverterSnapshotCard({ inv }: { inv: InverterData }) {
           <StatusChip status={inv.status} />
         </div>
         <div className="flex items-baseline gap-1 mb-3">
-          <span className={T.metricL}>{inv.performance_ratio_pct.toFixed(1)}</span>
+          <span className={T.metricL}>{inv.performance_ratio_pct?.toFixed(1) ?? '—'}</span>
           <span className={T.unit}>% PR</span>
         </div>
         <div className="h-1.5 bg-black/[0.06] rounded-full overflow-hidden mb-4">
-          <div className="h-full rounded-full bg-[#497d00]" style={{ width: `${Math.min(100, Math.max(0, inv.performance_ratio_pct))}%` }} />
+          <div className="h-full rounded-full bg-[#497d00]" style={{ width: `${Math.min(100, Math.max(0, inv.performance_ratio_pct ?? 0))}%` }} />
         </div>
         <div className="flex items-center justify-between text-[13px]">
           <span className="flex items-baseline gap-1">
-            <span className="font-semibold tabular-nums text-black">{inv.ac_active_power_kw.toFixed(1)}</span>
+            <span className="font-semibold tabular-nums text-black">{inv.ac_active_power_kw?.toFixed(1) ?? '—'}</span>
             <span className="text-black/50">kW</span>
           </span>
           <span className="flex items-baseline gap-1">
-            <span className="font-semibold tabular-nums text-[#e17100]">{inv.energy_daily_kwh.toLocaleString()}</span>
+            <span className="font-semibold tabular-nums text-[#e17100]">{inv.energy_daily_kwh?.toLocaleString() ?? '—'}
+              </span>
             <span className="text-black/50">kWh today</span>
           </span>
         </div>
@@ -252,28 +253,28 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
                     </div>
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {inv.ac_active_power_kw.toFixed(2)}
+                    {inv.ac_active_power_kw?.toFixed(2) ?? '—'}
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {inv.ac_reactive_power_kvar.toFixed(2)}
+                    {inv.ac_reactive_power_kvar?.toFixed(2) ?? '—'}
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {inv.energy_daily_kwh.toLocaleString()}
+                    {inv.energy_daily_kwh?.toLocaleString() ?? '—'}
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {(inv.energy_total_kwh / 1000).toFixed(1)}
+                    {inv.energy_total_kwh != null ? (inv.energy_total_kwh / 1000).toFixed(1) : '—'}
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {inv.inverter_efficiency_pct.toFixed(1)}%
+                    {inv.inverter_efficiency_pct != null ? `${inv.inverter_efficiency_pct.toFixed(1)}%` : '—'}
                   </td>
                   <td className="py-3 px-3 text-right font-semibold tabular-nums text-black">
-                    {inv.performance_ratio_pct.toFixed(1)}%
+                    {inv.performance_ratio_pct != null ? `${inv.performance_ratio_pct.toFixed(1)}%` : '—'}
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {inv.ac_power_factor.toFixed(2)}
+                    {inv.ac_power_factor?.toFixed(2) ?? '—'}
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
-                    {inv.grid_frequency_hz.toFixed(2)}
+                    {inv.grid_frequency_hz?.toFixed(2) ?? '—'}
                   </td>
                 </tr>
               )
