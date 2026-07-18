@@ -734,9 +734,9 @@ export default function InverterDetailPage() {
           <div className="min-w-0">
             <SectionHeader title="Electrical Details" meta="Grid & power quality" accent="olive" />
             <div className="flex flex-col">
-              <DetailRow label="Voltage A-B" value={detail ? (detail.grid_voltage_ab_v / 1000).toFixed(2) : '—'} unit="kV" />
-              <DetailRow label="Voltage B-C" value={detail ? (detail.grid_voltage_bc_v / 1000).toFixed(2) : '—'} unit="kV" />
-              <DetailRow label="Voltage C-A" value={detail ? (detail.grid_voltage_ca_v / 1000).toFixed(2) : '—'} unit="kV" />
+              <DetailRow label="Voltage A-B" value={detail ? detail.grid_voltage_ab_v.toFixed(1) : '—'} unit="V" />
+              <DetailRow label="Voltage B-C" value={detail ? detail.grid_voltage_bc_v.toFixed(1) : '—'} unit="V" />
+              <DetailRow label="Voltage C-A" value={detail ? detail.grid_voltage_ca_v.toFixed(1) : '—'} unit="V" />
               <DetailRow label="Frequency" value={detail?.grid_frequency_hz.toFixed(2) ?? '—'} unit="Hz" />
               <DetailRow label="Power Factor" value={detail?.ac_power_factor.toFixed(2) ?? '—'} />
               <DetailRow label="Reactive Power" value={detail?.ac_reactive_power_kvar.toFixed(2) ?? '—'} unit="kVAR" />
