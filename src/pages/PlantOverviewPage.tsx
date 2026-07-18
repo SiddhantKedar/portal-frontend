@@ -50,6 +50,7 @@ interface PlantOverview {
     power_factor: number
     ac_capacity_kw: number
     dc_capacity_kw: number
+    daily_generation_target_kwh: number | null
   }
   grid: {
     voltage_ab: number
@@ -353,9 +354,10 @@ function PerformanceZoneCard({
 }
 
 function PerformanceCards({
-  actualToday, performanceRatio, cuf,
+  actualToday, generationTarget, performanceRatio, cuf,
 }: {
   actualToday: number
+  generationTarget: number
   performanceRatio: number
   cuf: number
 }) {
@@ -365,7 +367,7 @@ function PerformanceCards({
         <PerformanceZoneCard
           title="Generation"
           actual={actualToday}
-          targeted={5500}
+          targeted={generationTarget}
           formatValue={(n) => `${n.toLocaleString()}\u00A0kWh`}
         />
       </div>
@@ -602,7 +604,9 @@ function PowerGauge({
         </RadialBarChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className={`${T.metricXL} text-[#e17100]`}>{Math.max(0, value).toLocaleString()}</span>
+        <span className={`${T.metricXL} text-[#e17100]`}>
+          {Math.max(0, value).toLocaleString(undefined, { maximumFractionDigits: value >= 1000 ? 0 : 1 })}
+        </span>
         <span className={`${T.unit} mt-1.5`}>kW</span>
       </div>
     </div>
@@ -1309,11 +1313,13 @@ export default function PlantOverviewPage() {
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5 shrink-0">
-                  <span className={T.metricL}>
-                    {overview?.plant.energy_active_export_kwh?.toLocaleString() ?? '—'}
-                  </span>
-                  <span className={T.unit}>kWh</span>
-                </div>
+                <span className={T.metricL}>
+                  {overview?.plant.energy_active_export_kwh != null
+                    ? (overview.plant.energy_active_export_kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                    : '—'}
+                </span>
+                <span className={T.unit}>MWh</span>
+              </div>
               </div>
 
               <div className="flex items-center justify-between gap-4 py-5">
@@ -1463,6 +1469,7 @@ export default function PlantOverviewPage() {
         <SectionHeader title="Performance" meta="Today · Live" accent="orange" />
         <PerformanceCards
           actualToday={overview?.plant.energy_today_kwh ?? 0}
+          generationTarget={overview?.plant.daily_generation_target_kwh ?? 0}
           performanceRatio={overview?.performance?.performance_ratio_pct ?? 0}
           cuf={overview?.performance?.cuf_pct ?? 0}
         />
