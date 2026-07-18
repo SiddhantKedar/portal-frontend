@@ -1035,6 +1035,8 @@ export default function PlantOverviewPage() {
     })
   }
 
+  // Near the top of the file, with your other constants
+  const SHOW_DAILY_ENERGY_CARD = false // temporarily disabled — bar width/centering needs another pass
   // ============================================================
   // Fetch functions — extracted into memoized callbacks so they can be
   // called both by their own effect (on dep change) and by fetchAll
@@ -1111,7 +1113,7 @@ export default function PlantOverviewPage() {
   const fetchAll = useCallback(async () => {
     await Promise.all([
       fetchOverview(),
-      fetchPowerTrend(),
+      ...(SHOW_DAILY_ENERGY_CARD ? [fetchDailyEnergy()] : []),
       fetchDailyEnergy(),
       fetchElecTrend(),
     ])
@@ -1538,7 +1540,9 @@ export default function PlantOverviewPage() {
       {/* ============ DAILY ENERGY ============ */}
       <Divider />
       <Section>
-        <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
+        {SHOW_DAILY_ENERGY_CARD && (
+          <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
+        )}
       </Section>
 
       {/* ============ ELECTRICAL TREND ============ */}
