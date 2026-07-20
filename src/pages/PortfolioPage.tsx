@@ -18,25 +18,26 @@ const T = {
 
 // ---- Types ----
 
-interface FleetSummary {
+interface PortfolioSummary {
   total_active_power_kw: number
-  total_energy_today_kwh: number
+  total_energy_today_kwh: number | null   // null when ?detail=basic
+  ac_capacity_kw?: number
   sites_online: number
   sites_total: number
   inverters_online: number
   inverters_total: number
-  ac_capacity_kw?: number
 }
 
 interface SiteSummary {
   site_id: number
   site_name: string
+  installer_name: string | null
   active_power_kw: number
-  energy_today_kwh: number
+  energy_today_kwh: number | null
   meter_online: boolean
   inverters_online: number
   inverters_total: number
-  last_updated: string
+  last_updated: string | null
 }
 
 interface CustomerSummary {
@@ -45,15 +46,16 @@ interface CustomerSummary {
   sites: SiteSummary[]
 }
 
-interface InstallerOverviewData {
-  fleet_summary: FleetSummary
+interface PortfolioData {
+  portfolio_summary: PortfolioSummary
   customers: CustomerSummary[]
-  installer_name: string
+  scope_name: string | null
 }
 
 // ---- Helpers ----
 
-function formatLastUpdated(iso: string) {
+function formatLastUpdated(iso: string | null) {
+  if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
@@ -120,127 +122,116 @@ function HealthFooter({ online, total }: { online: number; total: number }) {
 function CustomerBlock({ customer }: { customer: CustomerSummary }) {
   const navigate = useNavigate()
   const totalPower = customer.sites.reduce((sum, s) => sum + s.active_power_kw, 0)
-  const totalEnergy = customer.sites.reduce((sum, s) => sum + s.energy_today_kwh, 0)
+  const hasEnergy = customer.sites.some((s) => s.energy_today_kwh !== null)
+  const totalEnergy = hasEnergy
+    ? customer.sites.reduce((sum, s) => sum + (s.energy_today_kwh ?? 0), 0)
+    : null
   const sitesOnline = customer.sites.filter((s) => s.meter_online).length
   const allMetered = sitesOnline === customer.sites.length
 
   return (
     <div className="rounded-2xl border border-black/15 overflow-hidden">
-      {/* Header strip */}
-      <div className="flex items-start justify-between flex-wrap gap-4 px-6 py-5 border-b border-black/10">
-        <button
-          type="button"
-          onClick={() => navigate(`/customers/${customer.customer_id}`, { state: { customer } })}
-          className="group flex items-center gap-2 min-w-0 text-left"
-        >
+      <div className="flex items-stretch justify-between flex-wrap gap-4 px-5 py-4 bg-black/[0.02] border-b border-black/10">
+        <div className="flex items-stretch gap-3 min-w-0">
+          <span className="w-1 rounded-full bg-[#e17100] shrink-0 self-stretch" />
           <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5">
-              <h3 className="text-[18px] font-semibold text-black tracking-tight truncate group-hover:text-[#e17100] transition-colors">
-                {customer.customer_name}
-              </h3>
-              <ChevronRight size={16} className="text-black/30 group-hover:text-[#e17100] transition-colors shrink-0" />
-            </span>
-            <p className="text-[12px] text-black/50 mt-0.5">
+            <h3 className="text-[16px] font-semibold text-black tracking-tight truncate">
+              {customer.customer_name}
+            </h3>
+            <p className="text-[11px] text-black/50 mt-0.5">
               {customer.sites.length} site{customer.sites.length !== 1 ? 's' : ''}
             </p>
           </div>
-        </button>
-
-        {/* Summary rail */}
-        <div className="flex items-center gap-5 flex-wrap">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] uppercase tracking-[0.1em] text-black/50 font-semibold">Active Power</span>
-            <span className={`${T.metricM} mt-1`}>
-              {totalPower.toFixed(1)}<span className={`${T.unit} ml-1`}>kW</span>
-            </span>
-          </div>
-          <span className="w-px h-8 bg-black/10" />
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] uppercase tracking-[0.1em] text-black/50 font-semibold">Energy Today</span>
-            <span className={`${T.metricM} mt-1`}>
-              {totalEnergy.toLocaleString()}<span className={`${T.unit} ml-1`}>kWh</span>
-            </span>
-          </div>
-          <span className="w-px h-8 bg-black/10" />
-          <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
+        </div>
+        <div className="flex items-center gap-4 flex-wrap text-[12px] font-semibold tabular-nums">
+          <span className="text-black">{totalPower.toFixed(1)}<span className="text-black/40 font-medium ml-1">kW</span></span>
+          <span className="w-px h-4 bg-black/15" />
+          <span className="text-black">
+            {totalEnergy?.toLocaleString() ?? '—'}<span className="text-black/40 font-medium ml-1">kWh</span>
+          </span>
+          <span className="w-px h-4 bg-black/15" />
+          <span className="inline-flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${allMetered ? 'bg-green-500' : 'bg-[#e17100]'}`} />
             <span className={allMetered ? 'text-green-700' : 'text-[#e17100]'}>
-              {sitesOnline}/{customer.sites.length} metered
+              {sitesOnline}/{customer.sites.length}
             </span>
           </span>
         </div>
       </div>
 
-      {/* Site table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[720px]">
-          <thead>
-            <tr className="border-b border-black/10">
-              <th className="text-left text-[11px] uppercase tracking-[0.1em] text-black/50 font-semibold px-6 py-3">Site</th>
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black/50 font-semibold px-3 py-3 whitespace-nowrap">Active Power</th>
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black/50 font-semibold px-3 py-3 whitespace-nowrap">Energy Today</th>
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black/50 font-semibold px-3 py-3 whitespace-nowrap">Inverters</th>
-              <th className="text-center text-[11px] uppercase tracking-[0.1em] text-black/50 font-semibold px-3 py-3 whitespace-nowrap">Meter</th>
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black/50 font-semibold px-6 py-3 whitespace-nowrap">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customer.sites.map((site) => {
-              const invHealthy = site.inverters_online === site.inverters_total
-              return (
-                <tr
-                  key={site.site_id}
-                  onClick={() => navigate(`/customers/${customer.customer_id}`, { state: { customer } })}
-                  className="border-b border-black/[0.06] last:border-0 hover:bg-black/[0.02] transition-colors cursor-pointer"
-                >
-                  <td className="py-3.5 px-6 font-semibold text-black">{site.site_name}</td>
-                  <td className="py-3.5 px-3 text-right text-black font-medium tabular-nums">
-                    {site.active_power_kw.toFixed(1)} <span className="text-black/40 text-[11px]">kW</span>
-                  </td>
-                  <td className="py-3.5 px-3 text-right text-black font-medium tabular-nums">
-                    {site.energy_today_kwh.toLocaleString()} <span className="text-black/40 text-[11px]">kWh</span>
-                  </td>
-                  <td className="py-3.5 px-3 text-right tabular-nums">
-                    <span className={`font-semibold ${invHealthy ? 'text-green-700' : 'text-[#e17100]'}`}>
-                      {site.inverters_online}
-                    </span>
-                    <span className="text-black/40 text-[11px]"> / {site.inverters_total}</span>
-                  </td>
-                  <td className="py-3.5 px-3 text-center">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
-                      <span className={`w-1.5 h-1.5 rounded-full ${site.meter_online ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <span className={site.meter_online ? 'text-green-700' : 'text-red-600'}>
-                        {site.meter_online ? 'Online' : 'Offline'}
-                      </span>
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-6 text-right text-black/50 text-[12px] tabular-nums whitespace-nowrap">
+      <div className="divide-y divide-black/[0.06]">
+        {customer.sites.map((site) => {
+          const invHealthy = site.inverters_online === site.inverters_total
+          const share = totalPower > 0 ? Math.round((site.active_power_kw / totalPower) * 100) : 0
+
+          return (
+            <button
+              key={site.site_id}
+              type="button"
+              onClick={() => navigate(`/sites/${site.site_id}/plant`)}
+              className="group w-full text-left flex items-center gap-4 px-5 py-4 hover:bg-black/[0.02] transition-colors"
+            >
+              {/* Status rail — carries offline state without a red dot per row */}
+              {/* <span className={`w-1 self-stretch rounded-full shrink-0 ${site.meter_online ? 'bg-[#497d00]' : 'bg-[#dc2626]'}`} /> */}
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${site.meter_online ? 'bg-[#497d00]' : 'bg-[#dc2626]'}`} />
+                  <p className="text-[13px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">
+                    {site.site_name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 pl-3.5">
+                  <div className="h-1 w-24 bg-black/[0.06] rounded-full overflow-hidden shrink-0">
+                    <div className="h-full rounded-full bg-[#e17100]" style={{ width: `${share}%` }} />
+                  </div>
+                  <span className="text-[11px] text-black/40 tabular-nums">
                     {formatLastUpdated(site.last_updated)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-5 sm:gap-7 shrink-0 tabular-nums">
+                <div className="text-right w-16">
+                  <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p>
+                  <p className="text-[14px] font-semibold text-black mt-0.5">{site.active_power_kw.toFixed(1)}</p>
+                </div>
+                <div className="text-right w-20 hidden sm:block">
+                  <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p>
+                  <p className="text-[14px] font-semibold text-black mt-0.5">
+                    {site.energy_today_kwh?.toLocaleString() ?? '—'}
+                  </p>
+                </div>
+                <div className="text-right w-14 hidden md:block">
+                  <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p>
+                  <p className="text-[14px] font-semibold mt-0.5">
+                    <span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span>
+                    <span className="text-black/40 text-[11px]">/{site.inverters_total}</span>
+                  </p>
+                </div>
+                <ChevronRight size={16} className="text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
 }
-
 // ============================================================
 // Main Page
 // ============================================================
 
-export default function InstallerOverviewPage() {
-  const [data, setData] = useState<InstallerOverviewData | null>(null)
+export default function PortfolioPage() {
+  const [data, setData] = useState<PortfolioData | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchOverview = useCallback(async () => {
     try {
-      const res = await api.get<InstallerOverviewData>('/influx/installer/overview/')
+      const res = await api.get<PortfolioData>('/influx/portfolio/overview/')
       setData(res.data)
     } catch (err) {
-      console.error('Installer overview error:', err)
+      console.error('Portfolio overview error:', err)
     } finally {
       setLoading(false)
     }
@@ -254,7 +245,7 @@ export default function InstallerOverviewPage() {
     intervalMs: 60_000,
   })
 
-  const fleet = data?.fleet_summary
+  const fleet = data?.portfolio_summary
 
   const fleetUtil = fleet?.ac_capacity_kw
     ? Math.round((fleet.total_active_power_kw / fleet.ac_capacity_kw) * 100)
@@ -264,7 +255,7 @@ export default function InstallerOverviewPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-60">
-        <p className={T.meta}>Loading fleet overview…</p>
+        <p className={T.meta}>Loading portfolio…</p>
       </div>
     )
   }
@@ -292,8 +283,8 @@ export default function InstallerOverviewPage() {
           <div className="flex items-stretch gap-3">
             <span className="w-1 rounded-full bg-[#e17100] shrink-0 self-stretch" />
             <div className="min-w-0">
-              <p className={T.eyebrow}>Fleet Overview</p>
-              <h1 className={`${T.siteH1} mt-2`}>{data?.installer_name ?? 'All Sites'}</h1>
+              <p className={T.eyebrow}>Portfolio Overview</p>
+              <h1 className={`${T.siteH1} mt-2`}>{data?.scope_name ?? 'All Sites'}</h1>
               <p className={`${T.meta} text-black/50 mt-2`}>
                 {data?.customers.length ?? 0} customer{(data?.customers.length ?? 0) !== 1 ? 's' : ''} · {fleet?.sites_total ?? 0} site{(fleet?.sites_total ?? 0) !== 1 ? 's' : ''}
               </p>
@@ -353,7 +344,7 @@ export default function InstallerOverviewPage() {
                 <span className={T.eyebrow}>Energy Today</span>
               </div>
               <span className={`${T.metricL} shrink-0`}>
-                {fleet?.total_energy_today_kwh.toLocaleString() ?? '—'}
+                {fleet?.total_energy_today_kwh?.toLocaleString() ?? '—'}
                 <span className={`${T.unit} ml-1`}>kWh</span>
               </span>
             </div>

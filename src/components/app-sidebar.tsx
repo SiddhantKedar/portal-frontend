@@ -1,4 +1,4 @@
-import { LayoutDashboard, AudioWaveform, Activity, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun } from 'lucide-react'
+import { LayoutDashboard, AudioWaveform, Activity, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun, ArrowLeft } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import {
   Sidebar,
@@ -21,33 +21,37 @@ import { ChevronRight } from 'lucide-react'
 import { useSite } from '@/context/SiteContext'
 import { useAuth } from '@/context/AuthContext'
 
-// Shared nav link styling — black sidebar, white body text, amber-600 for
-// the active item's pill background and for hover state text/tint.
 const NAV_ACTIVE =
   'flex items-center gap-2.5 px-3 py-2 rounded-lg bg-amber-600 text-white font-medium'
 const NAV_INACTIVE =
   'flex items-center gap-2.5 px-3 py-2 rounded-lg !text-gray-300 hover:bg-amber-600/10 hover:!text-amber-600 transition-colors'
 
-// Sub-items (inverter list) use !text overrides — SidebarMenuSubButton's
-// own base styles otherwise win the specificity fight and render black.
 const SUB_ACTIVE = 'text-[12px] font-medium'
 const SUB_INACTIVE = 'text-[12px]'
 
 export function AppSidebar() {
-  const { devices } = useSite()
+  const { site, devices, selectableSites } = useSite()
   const { user } = useAuth()
   const { setOpenMobile, isMobile } = useSidebar()
 
-  // Close the sidebar on nav click, but only on mobile — desktop stays pinned open.
   const closeOnMobile = () => {
     if (isMobile) setOpenMobile(false)
   }
+
+  // Multi-site users can climb back out to the portfolio; single-site users have
+  // nowhere to go, so the link would be a dead end.
+  const showPortfolioLink = selectableSites.length > 1
 
   const inverters = devices
     .filter((d) => d.device_type === 'INVERTER' && d.is_active)
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const hasMeters = devices.some((d) => d.device_type === 'METER' && d.is_active)
+
+  // Every monitoring route hangs off the active site. On site-less routes
+  // (/portfolio, /profile) `base` is null and the Monitor group is suppressed —
+  // those links have no site to point at.
+  const base = site ? `/sites/${site.id}` : null
 
   return (
     <Sidebar className="bg-black border-r border-white/10 text-white [&_[data-sidebar=sidebar]]:bg-black">
@@ -60,33 +64,30 @@ export function AppSidebar() {
           </div>
           <div>
             <img
-        src="/Wording-white.svg"
-        alt="Enerlynx"
-        className="h-[15px] w-auto object-contain"
-      />
+              src="/Wording-white.svg"
+              alt="Enerlynx"
+              className="h-[15px] w-auto object-contain"
+            />
           </div>
         </div>
       </SidebarHeader>
 
-      {/* Nav */}
+      <SidebarContent>
 
-       {/* Installer only section */}
-        {user?.role === 'INSTALLER' && (
+        {/* Portfolio / back-out */}
+        {showPortfolioLink && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
-              Installer
-            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
-                      to="/installer"
+                      to="/portfolio"
                       onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
-                      <Building2 size={16} />
-                      <span className="text-[13px]">Fleet Overview</span>
+                      {site ? <ArrowLeft size={16} /> : <Building2 size={16} />}
+                      <span className="text-[13px]">{site ? 'All Sites' : 'Portfolio'}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -95,168 +96,178 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
-            Monitor
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+        {/* Active site name — orients the user once nav is site-relative */}
+        {site && (
+          <div className="px-4 pb-1">
+            <p className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
+              Current Site
+            </p>
+            <p className="text-[13px] font-medium text-white truncate mt-0.5">{site.name}</p>
+            <p className="text-[11px] text-gray-400 truncate">{site.customer_name}</p>
+          </div>
+        )}
 
-              {/* Plant Overview */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/plant"
-                    onClick={closeOnMobile}
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <Factory size={16} />
-                    <span className="text-[13px]">Plant Overview</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {/* Inverter Overview + sub items */}
+        {base && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-amber-700 font-semibold">
+              Monitor
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
               <SidebarMenu>
-                <Collapsible defaultOpen className="group/collapsible">
-                  <SidebarMenuItem>
-                    <div className="flex items-center w-full">
-                      <SidebarMenuButton asChild className="flex-1">
-                        <NavLink
-                          to="/inverters"
-                          onClick={closeOnMobile}
-                          className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                        >
-                          <AudioWaveform size={16} />
-                          <span className="text-[13px] font-medium">Inverter Overview</span>
-                        </NavLink>
-                      </SidebarMenuButton>
 
-                      <CollapsibleTrigger asChild>
-                        <button className="ml-auto p-1 text-gray-400 hover:text-amber-600">
-                          <ChevronRight
-                            size={14}
-                            className="transition-transform group-data-[state=open]/collapsible:rotate-90"
-                          />
-                        </button>
-                      </CollapsibleTrigger>
-                    </div>
-
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {inverters.map((inv) => (
-                          <SidebarMenuSubItem key={inv.id}>
-                            <SidebarMenuSubButton asChild>
-                              <NavLink
-                                to={`/inverters/${inv.influx_device_id}`}
-                                onClick={closeOnMobile}
-                                className={({ isActive }) => (isActive ? SUB_ACTIVE : SUB_INACTIVE)}
-                              >
-                                {inv.name}
-                              </NavLink>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
-              </SidebarMenu>
-
-              {/* SCB — String Combiner Box */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/scb"
-                    onClick={closeOnMobile}
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <GitMerge size={16} />
-                    <span className="text-[13px]">SCB</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {/* Meter Overview — only if meters exist */}
-              {hasMeters && (
+                {/* Plant Overview */}
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
-                      to="/meter"
+                      to={`${base}/plant`}
                       onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
-                      <Gauge size={16} />
-                      <span className="text-[13px]">Meter Overview</span>
+                      <Factory size={16} />
+                      <span className="text-[13px]">Plant Overview</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              )}
 
-              {/* Analytics */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/analytics"
-                    onClick={closeOnMobile}
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <LineChart size={16} />
-                    <span className="text-[13px]">Analytics</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                {/* Inverter Overview + sub items */}
+                <SidebarMenu>
+                  <Collapsible defaultOpen className="group/collapsible">
+                    <SidebarMenuItem>
+                      <div className="flex items-center w-full">
+                        <SidebarMenuButton asChild className="flex-1">
+                          <NavLink
+                            to={`${base}/inverters`}
+                            end
+                            onClick={closeOnMobile}
+                            className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                          >
+                            <AudioWaveform size={16} />
+                            <span className="text-[13px] font-medium">Inverter Overview</span>
+                          </NavLink>
+                        </SidebarMenuButton>
 
-              {/* Weather */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/weather"
-                    onClick={closeOnMobile}
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <CloudSun size={16} />
-                    <span className="text-[13px]">Weather</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <button className="ml-auto p-1 text-gray-400 hover:text-amber-600">
+                            <ChevronRight
+                              size={14}
+                              className="transition-transform group-data-[state=open]/collapsible:rotate-90"
+                            />
+                          </button>
+                        </CollapsibleTrigger>
+                      </div>
 
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {inverters.map((inv) => (
+                            <SidebarMenuSubItem key={inv.id}>
+                              <SidebarMenuSubButton asChild>
+                                <NavLink
+                                  to={`${base}/inverters/${inv.influx_device_id}`}
+                                  onClick={closeOnMobile}
+                                  className={({ isActive }) => (isActive ? SUB_ACTIVE : SUB_INACTIVE)}
+                                >
+                                  {inv.name}
+                                </NavLink>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                </SidebarMenu>
 
-              {/* System Health */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/health"
-                    onClick={closeOnMobile}
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <Activity size={16} />
-                    <span className="text-[13px]">System Health</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                {/* SCB — String Combiner Box */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={`${base}/scb`}
+                      onClick={closeOnMobile}
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <GitMerge size={16} />
+                      <span className="text-[13px]">SCB</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              {/* Fault Alerts */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/alerts"
-                    onClick={closeOnMobile}
-                    className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
-                  >
-                    <AlertTriangle size={16} />
-                    <span className="text-[13px]">Fault Alerts</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                {/* Meter Overview — only if meters exist */}
+                {hasMeters && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={`${base}/meter`}
+                        onClick={closeOnMobile}
+                        className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                      >
+                        <Gauge size={16} />
+                        <span className="text-[13px]">Meter Overview</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
 
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                {/* Analytics */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={`${base}/analytics`}
+                      onClick={closeOnMobile}
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <LineChart size={16} />
+                      <span className="text-[13px]">Analytics</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
+                {/* Weather */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={`${base}/weather`}
+                      onClick={closeOnMobile}
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <CloudSun size={16} />
+                      <span className="text-[13px]">Weather</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-       
+                {/* System Health */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={`${base}/health`}
+                      onClick={closeOnMobile}
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <Activity size={16} />
+                      <span className="text-[13px]">System Health</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                {/* Fault Alerts */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={`${base}/alerts`}
+                      onClick={closeOnMobile}
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <AlertTriangle size={16} />
+                      <span className="text-[13px]">Fault Alerts</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {/* Admin only section */}
         {user?.role === 'ADMIN' && (
           <SidebarGroup>
