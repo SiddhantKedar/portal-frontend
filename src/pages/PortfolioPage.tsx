@@ -125,7 +125,6 @@ function HealthFooter({ online, total }: { online: number; total: number }) {
 // ============================================================
 
 function CustomerBlock({ customer }: { customer: CustomerSummary }) {
-  const navigate = useNavigate()
   const totalPower = customer.sites.reduce((sum, s) => sum + s.active_power_kw, 0)
   const hasEnergy = customer.sites.some((s) => s.energy_today_kwh !== null)
   const totalEnergy = hasEnergy
