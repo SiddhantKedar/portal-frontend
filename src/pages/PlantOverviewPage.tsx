@@ -755,34 +755,34 @@ function PowerTrendCard({
           </ResponsiveContainer>
         </div>
       )}
-{stats && (
-  <div className="mt-4 pt-3 border-t border-black/15">
-    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-5 sm:gap-x-9 pb-1.5">
-      <span />
-      {['Now', 'Peak', 'Avg'].map((h) => (
-        <span key={h} className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">{h}</span>
-      ))}
-    </div>
-    {[
-      { name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw },
-      { name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2 },
-    ].map((g) => (
-      <div key={g.name} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-5 sm:gap-x-9 items-baseline py-1">
-        <span className="flex items-baseline gap-2 min-w-0">
-          <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: g.color }} />
-          <span className="text-[13px] font-semibold text-black truncate">{g.name}</span>
-          <span className="text-[10px] text-black/40 shrink-0">{g.unit}</span>
-        </span>
-        {(['last', 'max', 'mean'] as const).map((k) => (
-          <span key={k} className={`text-[13px] font-semibold tabular-nums text-right ${k === 'last' ? '' : 'text-black/55'}`}
-                style={k === 'last' ? { color: g.color } : undefined}>
-            {Number(g.s[k]).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-          </span>
-        ))}
-      </div>
-    ))}
-  </div>
-)}
+      {stats && (
+        <div className="mt-4 pt-3 border-t border-black/15">
+          <div className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] pb-1.5">
+            <span />
+            {['Now', 'Peak', 'Avg'].map((h) => (
+              <span key={h} className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">{h}</span>
+            ))}
+          </div>
+          {[
+            { name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw },
+            { name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2 },
+          ].map((g) => (
+            <div key={g.name} className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] items-baseline py-1">
+              <span className="flex items-baseline gap-2 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: g.color }} />
+                <span className="text-[13px] font-semibold text-black truncate">{g.name}</span>
+                <span className="text-[10px] text-black/40 shrink-0">{g.unit}</span>
+              </span>
+              {(['last', 'max', 'mean'] as const).map((k) => (
+                <span key={k} className={`text-[13px] font-semibold tabular-nums text-right ${k === 'last' ? '' : 'text-black/55'}`}
+                      style={k === 'last' ? { color: g.color } : undefined}>
+                  {Number(g.s[k]).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1513,87 +1513,69 @@ export default function PlantOverviewPage() {
         />
       </Section>
 
-      {/* ============ POWER TREND + GRID ============ */}
+      {/* ============ Power Trend============ */}
       <Divider />
       <Section>
-        <div className="grid grid-cols-1 md:grid-cols-3 pt-2 gap-8 md:gap-10">
-          <div className="md:col-span-2 min-w-0">
-            <PowerTrendCard
-              chartData={chartData}
-              trendLoading={trendLoading}
-              selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
-              stats={stats}
-              expanded={chartExpanded}
-              onToggle={() => setChartExpanded(o => !o)}
-              height="h-[340px]"
-              isMobile={isMobile}
-            />
-          </div>
+        <PowerTrendCard
+          chartData={chartData}
+          trendLoading={trendLoading}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          stats={stats}
+          expanded={chartExpanded}
+          onToggle={() => setChartExpanded(o => !o)}
+          height="h-[360px]"
+          isMobile={isMobile}
+        />
+      </Section>
 
-          {/* Grid — editorial list, no zebra, no table borders. Freq/PF live in the subtitle. */}
-<div className="min-w-0">
-  <SectionHeader title="Grid" meta="Live" accent="olive" />
-
-  {/* Frequency + PF promoted out of the subtitle */}
-  <div className="grid grid-cols-2 gap-3 mb-5">
-    {[
-      { label: 'Frequency', value: overview?.plant.frequency_hz, unit: 'Hz', digits: 2 },
-      { label: 'Power Factor', value: overview?.plant.power_factor, unit: '', digits: 2 },
-    ].map((m) => (
-      <div key={m.label} className="border border-black/15 rounded-lg px-3 py-2.5">
-        <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/50 mb-1.5">{m.label}</p>
-        <p className="flex items-baseline gap-1">
-          <span className={T.metricL}>
-            {m.value != null ? Number(m.value).toFixed(m.digits) : '—'}
-          </span>
-          {m.unit && <span className="text-[11px] text-black/50 font-medium">{m.unit}</span>}
-        </p>
-      </div>
-    ))}
-  </div>
-
-  <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 mb-2">Per phase</p>
-  <div className="flex flex-col gap-3.5">
-    {[
-      { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
-      { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
-      { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
-    ].map((row) => {
-      const peak = Math.max(
-        overview?.grid.current_a ?? 0,
-        overview?.grid.current_b ?? 0,
-        overview?.grid.current_c ?? 0,
-        0.001,
-      )
-      const pct = Math.min(100, ((row.current ?? 0) / peak) * 100)
-      return (
-        <div key={row.phase}>
-          <div className="flex items-baseline justify-between gap-3 mb-1.5">
-            <span className="text-[13px] font-semibold text-black">{row.phase}</span>
-            <div className="flex items-baseline gap-4">
-              <span className="flex items-baseline gap-1">
-                <span className="text-[14px] font-semibold tabular-nums text-black">
-                  {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
-                </span>
-                <span className="text-[10px] text-black/40">kV</span>
-              </span>
-              <span className="flex items-baseline gap-1 w-[68px] justify-end">
-                <span className="text-[14px] font-semibold tabular-nums text-[#497d00]">
-                  {row.current?.toFixed(2) ?? '—'}
-                </span>
-                <span className="text-[10px] text-black/40">A</span>
-              </span>
+      {/* ============ GRID ============ */}
+      <Divider />
+      <Section>
+        <SectionHeader
+          title="Grid"
+          meta={overview?.last_updated ? `Last Updated : ${formatLastUpdated(overview.last_updated)}` : 'No data'}
+          accent="olive"
+        />
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
+          {[
+            { label: 'Frequency', primary: overview?.plant.frequency_hz?.toFixed(2) ?? '—', unit: 'Hz' },
+            { label: 'Power Factor', primary: overview?.plant.power_factor?.toFixed(2) ?? '—', unit: '' },
+          ].map((m) => (
+            <div key={m.label} className="border border-black/15 rounded-lg px-3.5 py-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/50 mb-2">{m.label}</p>
+              <p className="flex items-baseline gap-1">
+                <span className={T.metricL}>{m.primary}</span>
+                {m.unit && <span className="text-[11px] text-black/50 font-medium">{m.unit}</span>}
+              </p>
             </div>
-          </div>
-          <div className="h-[3px] w-full rounded-full bg-black/[0.06] overflow-hidden">
-            <div className="h-full rounded-full bg-[#497d00] transition-[width] duration-500" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-      )
-    })}
-  </div>
-</div>
+          ))}
+          {[
+            { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
+            { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
+            { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
+          ].map((row) => (
+            <div key={row.phase} className="flex gap-3 border border-black/15 rounded-lg px-3.5 py-3">
+              <span className="w-[3px] rounded-full self-stretch shrink-0 bg-[#497d00]" />
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/50 mb-2">
+                  Phase {row.phase}
+                </p>
+                <div className="flex items-baseline gap-4">
+                  <span className="flex items-baseline gap-1">
+                    <span className={T.metricM}>
+                      {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
+                    </span>
+                    <span className="text-[10px] text-black/50">kV</span>
+                  </span>
+                  <span className="flex items-baseline gap-1">
+                    <span className={`${T.metricM} text-[#497d00]`}>{row.current?.toFixed(2) ?? '—'}</span>
+                    <span className="text-[10px] text-black/50">A</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </Section>
 
