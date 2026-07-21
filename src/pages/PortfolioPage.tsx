@@ -3,6 +3,7 @@ import { Zap, TrendingUp, Building2, Cpu, RefreshCw, ChevronRight, Gauge } from 
 import { useNavigate } from 'react-router-dom'
 import api from '@/api/axios'
 import { useAutoRefresh } from '@/api/useAutoRefresh'
+import { useAuth } from '@/context/AuthContext'
 
 // ---- Typography tokens (shared with PlantOverviewPage) ----
 const T = {
@@ -102,9 +103,13 @@ function SectionHeader({
 // Fleet health footer — online/total with a status dot
 // ============================================================
 
-// Small online/total footer line with a status dot
 function HealthFooter({ online, total }: { online: number; total: number }) {
-  const allGood = total > 0 && online === total
+  // total === 0 means nothing is configured yet — not a fault. Reporting
+  // "0 offline" in amber implies a problem that doesn't exist.
+  if (total === 0) {
+    return <span className="text-[12px] font-medium text-black/40">Not configured</span>
+  }
+  const allGood = online === total
   return (
     <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
       <span className={`w-1.5 h-1.5 rounded-full ${allGood ? 'bg-green-500' : 'bg-[#e17100]'}`} />
@@ -160,62 +165,111 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
       </div>
 
       <div className="divide-y divide-black/[0.06]">
-        {customer.sites.map((site) => {
-          const invHealthy = site.inverters_online === site.inverters_total
-          const share = totalPower > 0 ? Math.round((site.active_power_kw / totalPower) * 100) : 0
-
-          return (
-            <button
-              key={site.site_id}
-              type="button"
-              onClick={() => navigate(`/sites/${site.site_id}/plant`)}
-              className="group w-full text-left flex items-center gap-4 px-5 py-4 hover:bg-black/[0.02] transition-colors"
-            >
-              {/* Status rail — carries offline state without a red dot per row */}
-              {/* <span className={`w-1 self-stretch rounded-full shrink-0 ${site.meter_online ? 'bg-[#497d00]' : 'bg-[#dc2626]'}`} /> */}
-
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${site.meter_online ? 'bg-[#497d00]' : 'bg-[#dc2626]'}`} />
-                  <p className="text-[13px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">
-                    {site.site_name}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 mt-1.5 pl-3.5">
-                  <div className="h-1 w-24 bg-black/[0.06] rounded-full overflow-hidden shrink-0">
-                    <div className="h-full rounded-full bg-[#e17100]" style={{ width: `${share}%` }} />
-                  </div>
-                  <span className="text-[11px] text-black/40 tabular-nums">
-                    {formatLastUpdated(site.last_updated)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-5 sm:gap-7 shrink-0 tabular-nums">
-                <div className="text-right w-16">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p>
-                  <p className="text-[14px] font-semibold text-black mt-0.5">{site.active_power_kw.toFixed(1)}</p>
-                </div>
-                <div className="text-right w-20 hidden sm:block">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p>
-                  <p className="text-[14px] font-semibold text-black mt-0.5">
-                    {site.energy_today_kwh?.toLocaleString() ?? '—'}
-                  </p>
-                </div>
-                <div className="text-right w-14 hidden md:block">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p>
-                  <p className="text-[14px] font-semibold mt-0.5">
-                    <span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span>
-                    <span className="text-black/40 text-[11px]">/{site.inverters_total}</span>
-                  </p>
-                </div>
-                <ChevronRight size={16} className="text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
-              </div>
-            </button>
-          )
-        })}
+        {customer.sites.map((site) => (
+          <SiteRow
+            key={site.site_id}
+            site={site}
+            share={totalPower > 0 ? Math.round((site.active_power_kw / totalPower) * 100) : 0}
+          />
+        ))}
       </div>
     </div>
+  )
+}
+
+function FlatSiteList({ sites }: { sites: SiteSummary[] }) {
+  const totalPower = sites.reduce((sum, s) => sum + s.active_power_kw, 0)
+  return (
+    <div className="rounded-2xl border border-black/15 overflow-hidden divide-y divide-black/[0.06]">
+      {sites.map((site) => (
+        <SiteRow
+          key={site.site_id}
+          site={site}
+          share={totalPower > 0 ? Math.round((site.active_power_kw / totalPower) * 100) : 0}
+          showInstaller
+        />
+      ))}
+    </div>
+  )
+}
+
+// Site Row
+
+function SiteRow({
+  site,
+  share,
+  showInstaller = false,
+}: {
+  site: SiteSummary
+  share: number
+  showInstaller?: boolean
+}) {
+  const navigate = useNavigate()
+  const hasInverters = site.inverters_total > 0
+  const invHealthy = hasInverters && site.inverters_online === site.inverters_total
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(`/sites/${site.site_id}/plant`)}
+      className="group w-full text-left flex items-center gap-4 px-5 py-4 hover:bg-black/[0.02] transition-colors"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="text-[13px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">
+            {site.site_name}
+          </p>
+          {!site.meter_online && (
+            <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] font-semibold text-[#dc2626] border border-[#dc2626]/30 bg-[#dc2626]/[0.06] rounded px-1.5 py-0.5">
+              Offline
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-1.5">
+          {share > 0 && (
+            <div className="h-1 w-24 bg-black/[0.06] rounded-full overflow-hidden shrink-0">
+              <div className="h-full rounded-full bg-[#e17100]" style={{ width: `${Math.min(share, 100)}%` }} />
+            </div>
+          )}
+          <span className="text-[11px] text-black/40 tabular-nums truncate">
+            {/* Customers see who maintains the plant — the one bit of context
+                the customer-grouping layout was hiding from them. */}
+            {showInstaller && site.installer_name
+              ? `${site.installer_name} · ${formatLastUpdated(site.last_updated)}`
+              : formatLastUpdated(site.last_updated)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-5 sm:gap-7 shrink-0 tabular-nums">
+        <div className="text-right w-20">
+          <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p>
+          <p className="text-[14px] font-semibold text-black mt-0.5">
+            {site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span>
+          </p>
+        </div>
+        <div className="text-right w-24 hidden sm:block">
+          <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p>
+          <p className="text-[14px] font-semibold text-black mt-0.5">
+            {site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span>
+          </p>
+        </div>
+        <div className="text-right w-14 hidden md:block">
+          <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p>
+          <p className="text-[14px] font-semibold mt-0.5">
+            {hasInverters ? (
+              <>
+                <span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span>
+                <span className="text-black/40 text-[11px]">/{site.inverters_total}</span>
+              </>
+            ) : (
+              <span className="text-black/30">—</span>
+            )}
+          </p>
+        </div>
+        <ChevronRight size={16} className="text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
+      </div>
+    </button>
   )
 }
 // ============================================================
@@ -225,6 +279,12 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
 export default function PortfolioPage() {
   const [data, setData] = useState<PortfolioData | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const { user } = useAuth()
+  // A customer already knows who they are — grouping their own sites under
+  // their own name repeats the page heading for no information gain.
+  const groupByCustomer = user?.role !== 'CUSTOMER'
+  const allSites = data?.customers.flatMap((c) => c.sites) ?? []
 
   const fetchOverview = useCallback(async () => {
     try {
@@ -283,10 +343,13 @@ export default function PortfolioPage() {
           <div className="flex items-stretch gap-3">
             <span className="w-1 rounded-full bg-[#e17100] shrink-0 self-stretch" />
             <div className="min-w-0">
-              <p className={T.eyebrow}>Portfolio Overview</p>
+              <p className={T.eyebrow}>{groupByCustomer ? 'Portfolio Overview' : 'Your Sites'}</p>
               <h1 className={`${T.siteH1} mt-2`}>{data?.scope_name ?? 'All Sites'}</h1>
               <p className={`${T.meta} text-black/50 mt-2`}>
-                {data?.customers.length ?? 0} customer{(data?.customers.length ?? 0) !== 1 ? 's' : ''} · {fleet?.sites_total ?? 0} site{(fleet?.sites_total ?? 0) !== 1 ? 's' : ''}
+                {groupByCustomer && (
+                  <>{data?.customers.length ?? 0} customer{(data?.customers.length ?? 0) !== 1 ? 's' : ''} · </>
+                )}
+                {fleet?.sites_total ?? 0} site{(fleet?.sites_total ?? 0) !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
@@ -381,20 +444,25 @@ export default function PortfolioPage() {
       {/* ============ CUSTOMERS ============ */}
       <Divider />
       <section className="pt-8 space-y-5">
-        <SectionHeader title="Customers" meta="Sites grouped by customer" accent="orange" />
+        <SectionHeader
+          title={groupByCustomer ? 'Customers' : 'Sites'}
+          meta={groupByCustomer ? 'Sites grouped by customer' : 'Select a site to view its plant overview'}
+          accent="orange"
+        />
 
-        {data?.customers.map((customer) => (
-          <CustomerBlock key={customer.customer_id} customer={customer} />
-        ))}
+        {groupByCustomer
+          ? data?.customers.map((customer) => (
+              <CustomerBlock key={customer.customer_id} customer={customer} />
+            ))
+          : <FlatSiteList sites={allSites} />}
 
-        {data?.customers.length === 0 && (
+        {allSites.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <Gauge size={22} className="text-black/25" />
-            <p className={`${T.meta} text-black/50`}>No customers found.</p>
+            <p className={`${T.meta} text-black/50`}>No sites found.</p>
           </div>
         )}
       </section>
-
     </div>
   )
 }
