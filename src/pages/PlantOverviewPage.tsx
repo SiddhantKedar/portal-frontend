@@ -109,8 +109,21 @@ interface ElecTrendPoint {
   grid_frequency_hz: number
 }
 
+type ElecStat = { min: number; max: number; last: number }
+
+interface ElecTrendStats {
+  voltage_line_ab_v: ElecStat
+  voltage_line_bc_v: ElecStat
+  voltage_line_ca_v: ElecStat
+  current_phase_a: ElecStat
+  current_phase_b: ElecStat
+  current_phase_c: ElecStat
+  grid_frequency_hz: ElecStat
+}
+
 interface ElecTrendData {
   data: ElecTrendPoint[]
+  stats: ElecTrendStats | null
 }
 
 interface DailyEnergyPoint {
@@ -827,9 +840,19 @@ const ELEC_GROUPS = [
   { key: 'frequency', label: 'Frequency', color: '#8A8A8A' },
 ]
 
+const ELEC_STAT_ROWS = [
+  { group: 'voltage',   key: 'voltage_line_ab_v', name: 'Voltage AB', unit: 'kV', color: '#e17100', scale: 0.001, dp: 2 },
+  { group: 'voltage',   key: 'voltage_line_bc_v', name: 'Voltage BC', unit: 'kV', color: '#D97706', scale: 0.001, dp: 2 },
+  { group: 'voltage',   key: 'voltage_line_ca_v', name: 'Voltage CA', unit: 'kV', color: '#b45309', scale: 0.001, dp: 2 },
+  { group: 'current',   key: 'current_phase_a',   name: 'Current A',  unit: 'A',  color: '#497d00', scale: 1, dp: 2 },
+  { group: 'current',   key: 'current_phase_b',   name: 'Current B',  unit: 'A',  color: '#15803d', scale: 1, dp: 2 },
+  { group: 'current',   key: 'current_phase_c',   name: 'Current C',  unit: 'A',  color: '#166534', scale: 1, dp: 2 },
+  { group: 'frequency', key: 'grid_frequency_hz', name: 'Frequency',  unit: 'Hz', color: '#8A8A8A', scale: 1, dp: 2 },
+] as const
+
 function ElectricalTrendCard({
   chartData, trendLoading, selectedDate, setSelectedDate,
-  hidden, onSeriesToggle, expanded, onToggleExpand, height, isMobile,
+  hidden, onSeriesToggle, expanded, onToggleExpand, height, isMobile, stats
 }: {
   chartData: { time: number; [key: string]: number | null }[]
   trendLoading: boolean
@@ -841,6 +864,7 @@ function ElectricalTrendCard({
   onToggleExpand: () => void
   height: string
   isMobile: boolean
+  stats: ElecTrendStats | null
 }) {
   return (
     <div className={expanded ? 'px-6 pt-5 pb-5' : ''}>
@@ -950,6 +974,35 @@ function ElectricalTrendCard({
               )}
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+      )}
+      {stats && (
+        <div className="mt-4 pt-3 border-t border-black/15">
+          <div className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] pb-1.5">
+            <span />
+            {['Now', 'Max', 'Min'].map((h) => (
+              <span key={h} className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">{h}</span>
+            ))}
+          </div>
+          {ELEC_STAT_ROWS.filter((r) => !hidden.has(r.group)).map((r) => {
+            const s = stats[r.key]
+            if (!s) return null
+            return (
+              <div key={r.key} className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] items-baseline py-1">
+                <span className="flex items-baseline gap-2 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: r.color }} />
+                  <span className="text-[13px] font-semibold text-black truncate">{r.name}</span>
+                  <span className="text-[10px] text-black/40 shrink-0">{r.unit}</span>
+                </span>
+                {(['last', 'max', 'min'] as const).map((k) => (
+                  <span key={k} className={`text-[13px] font-semibold tabular-nums text-right ${k === 'last' ? '' : 'text-black/55'}`}
+                        style={k === 'last' ? { color: r.color } : undefined}>
+                    {(Number(s[k]) * r.scale).toFixed(r.dp)}
+                  </span>
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -1074,6 +1127,8 @@ export default function PlantOverviewPage() {
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
   const [dailyEnergyLoading, setDailyEnergyLoading] = useState(false)
 
+  const [elecStats, setElecStats] = useState<ElecTrendStats | null>(null)
+
   const POWER_TREND_INTERVAL_MIN = 5   // must match backend interval
   const GAP_FACTOR = 2.5
 
@@ -1154,20 +1209,22 @@ export default function PlantOverviewPage() {
     }
   }, [site?.id])
 
-  const fetchElecTrend = useCallback(async () => {
-    if (!site?.id) return
-    setElecTrendLoading(true)
-    try {
-      const res = await api.get<ElecTrendData>(
-        `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
-      )
-      setElecTrend(res.data.data)
-    } catch {
-      setElecTrend([])
-    } finally {
-      setElecTrendLoading(false)
-    }
-  }, [site?.id, elecSelectedDate])
+const fetchElecTrend = useCallback(async () => {
+  if (!site?.id) return
+  setElecTrendLoading(true)
+  try {
+    const res = await api.get<ElecTrendData>(
+      `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
+    )
+    setElecTrend(res.data.data)
+    setElecStats(res.data.stats ?? null)
+  } catch {
+    setElecTrend([])
+    setElecStats(null)
+  } finally {
+    setElecTrendLoading(false)
+  }
+}, [site?.id, elecSelectedDate])
 
   // Initial + dep-change fetches. Each effect fires when its fetcher's identity changes,
   // which happens when site.id or the relevant selected date changes.
@@ -1591,7 +1648,7 @@ export default function PlantOverviewPage() {
           stats={stats}
           expanded={chartExpanded}
           onToggle={() => setChartExpanded(o => !o)}
-          height="h-[360px]"
+          height="h-[240px] sm:h-[360px]"
           isMobile={isMobile}
         />
       </Section>
@@ -1666,8 +1723,9 @@ export default function PlantOverviewPage() {
           onSeriesToggle={toggleElec}
           expanded={elecExpanded}
           onToggleExpand={() => setElecExpanded(o => !o)}
-          height="h-[280px]"
+          height="h-[220px] sm:h-[280px]"
           isMobile={isMobile}
+          stats={elecStats}
         />
       </Section>
 
@@ -1691,8 +1749,10 @@ export default function PlantOverviewPage() {
               onSeriesToggle={toggleElec}
               expanded={elecExpanded}
               onToggleExpand={() => setElecExpanded(false)}
-              height="h-[480px]"
+              height="h-[220px] sm:h-[280px]"
               isMobile={isMobile}
+              stats={elecStats}
+
             />
           </div>
         </div>,
