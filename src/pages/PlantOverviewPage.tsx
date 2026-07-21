@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Sun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
 } from 'lucide-react'
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
 import { DatePicker } from '@/components/DatePicker'
 import {
   Area, XAxis, YAxis,
@@ -131,20 +126,21 @@ interface DailyEnergyData {
 
 // ---- Helpers ----
 
-function minutesSinceMidnight(iso: string) {
-  const d = new Date(iso)
-  return d.getHours() * 60 + d.getMinutes()
+/** Minutes elapsed since IST midnight of `day` (YYYY-MM-DD). Absolute — never wraps. */
+function minutesFromIstDayStart(iso: string, day: string) {
+  const dayStartMs = Date.parse(`${day}T00:00:00+05:30`)
+  return (Date.parse(iso) - dayStartMs) / 60000
 }
 
 function formatMinutesTick(minutes: number) {
-  const h = Math.floor(minutes / 60) % 24
-  const m = minutes % 60
-  const d = new Date()
-  d.setHours(h, m, 0, 0)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const total = Math.round(minutes)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 const DAY_TICKS = [0, 180, 360, 540, 720, 900, 1080, 1260, 1440]
+const DAY_TICKS_MOBILE = [0, 360, 720, 1080, 1440]
 
 function formatLastUpdated(iso: string) {
   const d = new Date(iso)
@@ -352,6 +348,31 @@ function PerformanceZoneCard({
     </div>
   )
 }
+
+function PowerTrendTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+  const t = payload[0]?.payload?.time
+  return (
+    <div className="rounded-lg border border-black bg-white px-3 py-2 min-w-[160px]">
+      <p className="text-[12px] font-semibold text-black mb-1.5">
+        {typeof t === 'number' ? formatMinutesTick(t) : ''}
+      </p>
+      {payload.map((e: any) => (
+        <div key={e.dataKey} className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
+          <span className="text-[12px] text-black/50">{e.name}</span>
+          <span className="text-[12px] font-semibold tabular-nums text-black ml-auto">
+            {e.value == null ? '—' : Number(e.value).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          </span>
+          <span className="text-[11px] text-black/50 w-9 text-right">
+            {e.dataKey === 'power' ? 'kW' : 'W/m²'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 
 function PerformanceCards({
   actualToday, generationTarget, performanceRatio, cuf,
@@ -628,11 +649,10 @@ function Section({
 // Power Trend
 // ============================================================
 function PowerTrendCard({
-  chartData, chartConfig, trendLoading, selectedDate, setSelectedDate,
-  stats, expanded, onToggle, height,
+  chartData, trendLoading, selectedDate, setSelectedDate,
+  stats, expanded, onToggle, height, isMobile,
 }: {
   chartData: { time: number; power: number | null; irradiation: number | null }[]
-  chartConfig: Record<string, { label: string; color: string }>
   trendLoading: boolean
   selectedDate: string
   setSelectedDate: (d: string) => void
@@ -640,12 +660,13 @@ function PowerTrendCard({
   expanded: boolean
   onToggle: () => void
   height: string
+  isMobile: boolean
 }) {
   return (
     <div className={expanded ? 'px-6 pt-5 pb-5' : ''}>
       <SectionHeader
         title="Power Trend"
-        meta={`Active power · ${selectedDate === todayString() ? 'Today' : selectedDate}`}
+        meta={`Active power · Irradiance · ${selectedDate === todayString() ? 'Today' : selectedDate}`}
         accent="orange"
         actions={
           <>
@@ -661,21 +682,23 @@ function PowerTrendCard({
           <p className={T.meta}>Loading chart…</p>
         </div>
       ) : (
-        <ChartContainer config={chartConfig} className={`${height} w-full`}>
+        <div className={`${height} w-full`}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="plantPowerGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#D97706" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#D97706" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#e17100" stopOpacity={0.20} />
+                  <stop offset="100%" stopColor="#e17100" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
               <XAxis
                 dataKey="time"
                 type="number"
+                scale="linear"
                 domain={[0, 1440]}
-                ticks={DAY_TICKS}
+                allowDataOverflow
+                ticks={isMobile ? DAY_TICKS_MOBILE : DAY_TICKS}
                 tickFormatter={formatMinutesTick}
                 tick={{ fontSize: 12, fill: '#171717' }}
                 tickLine={false}
@@ -683,94 +706,83 @@ function PowerTrendCard({
               />
               <YAxis
                 yAxisId="power"
-                tick={{ fontSize: 12, fill: '#171717' }}
-                tickLine={false}
-                axisLine={false}
-                width={44}
-              />
-              <YAxis
-                yAxisId="irr"
-                orientation="right"
+                domain={[0, 'auto']}
+                allowDecimals={false}
                 tick={{ fontSize: 12, fill: '#171717' }}
                 tickLine={false}
                 axisLine={false}
                 width={48}
-                tickFormatter={(v) => `${v}`}
               />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(_label, payload) => {
-                      const time = payload?.[0]?.payload?.time
-                      return typeof time === 'number' ? formatMinutesTick(time) : ''
-                    }}
-                  />
-                }
+              <YAxis
+                yAxisId="irr"
+                orientation="right"
+                domain={[0, 'auto']}
+                allowDecimals={false}
+                tick={{ fontSize: 12, fill: '#497d00'  }}
+                tickLine={false}
+                axisLine={false}
+                width={44}
+              />
+              <Tooltip cursor={{ stroke: '#00000022', strokeWidth: 1 }} content={<PowerTrendTooltip />} />
+              <Line
+                yAxisId="irr"
+                type="monotone"
+                dataKey="irradiation"
+                name="Irradiance"
+                stroke="#497d00"
+                strokeWidth={1.25}
+                strokeDasharray="4 3"
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+                activeDot={{ r: 3.5, fill: "#497d00" }}
               />
               <Area
                 yAxisId="power"
                 type="monotone"
                 dataKey="power"
-                stroke="#D97706"
-                strokeWidth={1.5}
+                name="Active Power"
+                stroke="#e17100"
+                strokeWidth={1.75}
                 fill="url(#plantPowerGradient)"
+                baseValue={0}
                 dot={false}
                 connectNulls={false}
-                activeDot={{ r: 4, fill: '#D97706' }}
-              />
-              <Line
-                yAxisId="irr"
-                type="monotone"
-                dataKey="irradiation"
-                stroke="#22C55E"
-                strokeWidth={1.5}
-                dot={false}
-                connectNulls={false}
-                activeDot={{ r: 4, fill: '#22C55E' }}
-                strokeDasharray="4 3"
+                isAnimationActive={false}
+                activeDot={{ r: 4, fill: '#e17100' }}
               />
             </ComposedChart>
           </ResponsiveContainer>
-        </ChartContainer>
-      )}
-      {stats && (
-        <div className="flex flex-col gap-2 pt-3 pb-1 mt-2 border-t border-black/10">
-          {/* Power row — label stacks above stats on mobile */}
-          <div className="flex items-baseline gap-2 sm:gap-6 flex-wrap">
-            <span className="text-[12px] text-[#e17100] uppercase tracking-[0.12em] font-semibold sm:w-24 shrink-0">
-              Power
-            </span>
-            <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
-              {(['last','max'] as const).map((k) => (
-                <div key={k} className="flex items-baseline gap-1.5">
-                  <span className={T.eyebrow}>{k === 'max' ? 'Peak' : 'Last'}</span>
-                  <span className={`text-[12px] font-semibold tabular-nums ${k === 'max' ? 'text-[#e17100]' : 'text-black'}`}>
-                    {stats.active_power_total_kw[k]}
-                  </span>
-                  <span className={T.unit}>kW</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Irradiation row — same treatment */}
-          <div className="flex items-baseline gap-2 sm:gap-6 flex-wrap">
-            <span className="text-[12px] text-[#22C55E] uppercase tracking-[0.12em] font-semibold sm:w-24 shrink-0">
-              Irradiation
-            </span>
-            <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
-              {(['last', 'max'] as const).map((k) => (
-                <div key={k} className="flex items-baseline gap-1.5">
-                  <span className={T.eyebrow}>{k === 'max' ? 'Peak' : 'Last'}</span>
-                  <span className={`text-[12px] font-semibold tabular-nums ${k === 'max' ? 'text-[#22C55E]' : 'text-black'}`}>
-                    {stats.irradiation_inclined_wm2[k]}
-                  </span>
-                  <span className={T.unit}>W/m²</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
+{stats && (
+  <div className="mt-4 pt-3 border-t border-black/15">
+    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-5 sm:gap-x-9 pb-1.5">
+      <span />
+      {['Now', 'Peak', 'Avg'].map((h) => (
+        <span key={h} className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">{h}</span>
+      ))}
+    </div>
+    {[
+      { name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw },
+      { name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2 },
+    ].map((g) => (
+      <div key={g.name} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-5 sm:gap-x-9 items-baseline py-1">
+        <span className="flex items-baseline gap-2 min-w-0">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: g.color }} />
+          <span className="text-[13px] font-semibold text-black truncate">{g.name}</span>
+          <span className="text-[10px] text-black/40 shrink-0">{g.unit}</span>
+        </span>
+        {(['last', 'max', 'mean'] as const).map((k) => (
+          <span key={k} className={`text-[13px] font-semibold tabular-nums text-right ${k === 'last' ? '' : 'text-black/55'}`}
+                style={k === 'last' ? { color: g.color } : undefined}>
+            {Number(g.s[k]).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          </span>
+        ))}
+      </div>
+    ))}
+  </div>
+)}
     </div>
   )
 }
@@ -1020,9 +1032,22 @@ export default function PlantOverviewPage() {
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
   const [dailyEnergyLoading, setDailyEnergyLoading] = useState(false)
 
+  const POWER_TREND_INTERVAL_MIN = 5   // must match backend interval
+  const GAP_FACTOR = 2.5
+
   const tempDelta = overview?.weather
     ? (overview.weather.module_temp_c - overview.weather.ambient_temp_c).toFixed(1)
     : null
+
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
 
   const weatherOffline = overview?.weather?.status === 'offline'
   const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0, weatherOffline)
@@ -1130,11 +1155,26 @@ export default function PlantOverviewPage() {
     onWake: fetchAll,
   })
 
-  const chartData = trend.map((p) => ({
-    time: minutesSinceMidnight(p.time),
-    power: p.active_power_total_kw > 0 ? p.active_power_total_kw : null,
-    irradiation: p.irradiation_inclined_wm2 > 0 ? p.irradiation_inclined_wm2 : null,
-  }))
+  const chartData = useMemo(() => {
+    const pts = trend
+      .map((p) => ({
+        time: minutesFromIstDayStart(p.time, selectedDate),
+        power: p.active_power_total_kw == null ? null : Math.max(0, p.active_power_total_kw),
+        irradiation: p.irradiation_inclined_wm2 == null ? null : Math.max(0, p.irradiation_inclined_wm2),
+      }))
+      .filter((p) => p.time >= 0 && p.time <= 1440)
+      .sort((a, b) => a.time - b.time)
+
+    const out: typeof pts = []
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[i - 1]
+      if (prev && pts[i].time - prev.time > POWER_TREND_INTERVAL_MIN * GAP_FACTOR) {
+        out.push({ time: prev.time + POWER_TREND_INTERVAL_MIN, power: null, irradiation: null })
+      }
+      out.push(pts[i])
+    }
+    return out
+  }, [trend, selectedDate])
 
   const elecChartData = elecTrend.map((p) => ({
     time: formatTime(p.time),
@@ -1153,10 +1193,6 @@ export default function PlantOverviewPage() {
     fill: d.date === todayString() ? '#e17100' : '#497d00',
   }))
 
-  const chartConfig = {
-    power: { label: 'Active Power (kW)', color: '#D97706' },
-    irradiation: { label: 'Irradiation (W/m²)', color: '#22C55E' },
-  }
 
   if (loading) {
     return (
@@ -1484,56 +1520,80 @@ export default function PlantOverviewPage() {
           <div className="md:col-span-2 min-w-0">
             <PowerTrendCard
               chartData={chartData}
-              chartConfig={chartConfig}
               trendLoading={trendLoading}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               stats={stats}
               expanded={chartExpanded}
               onToggle={() => setChartExpanded(o => !o)}
-              height="h-[240px]"
+              height="h-[340px]"
+              isMobile={isMobile}
             />
           </div>
 
           {/* Grid — editorial list, no zebra, no table borders. Freq/PF live in the subtitle. */}
-          <div className="min-w-0">
-            <SectionHeader
-              title="Grid"
-              meta={`${overview?.plant.frequency_hz ?? '—'} Hz · PF ${overview?.plant.power_factor ?? '—'}`}
-              accent="olive"
-            />
-            <div className="flex flex-col">
-              {[
-                { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
-                { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
-                { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
-              ].map((row, i, arr) => (
-                <div
-                  key={row.phase}
-                  className={`flex items-center justify-between gap-3 py-3 ${i < arr.length - 1 ? 'border-b border-black/10' : ''}`}
-                >
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={T.eyebrow}>Phase</span>
-                    <span className={T.metricM}>{row.phase}</span>
-                  </div>
-                  <div className="flex items-baseline gap-3 sm:gap-5">
-                    <div className="flex items-baseline gap-1">
-                      <span className={T.metricM}>
-                        {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
-                      </span>
-                      <span className={T.unit}>kV</span>
-                    </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className={`${T.metricM} text-[#497d00]`}>
-                        {row.current?.toFixed(2) ?? '—'}
-                      </span>
-                      <span className={T.unit}>A</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+<div className="min-w-0">
+  <SectionHeader title="Grid" meta="Live" accent="olive" />
+
+  {/* Frequency + PF promoted out of the subtitle */}
+  <div className="grid grid-cols-2 gap-3 mb-5">
+    {[
+      { label: 'Frequency', value: overview?.plant.frequency_hz, unit: 'Hz', digits: 2 },
+      { label: 'Power Factor', value: overview?.plant.power_factor, unit: '', digits: 2 },
+    ].map((m) => (
+      <div key={m.label} className="border border-black/15 rounded-lg px-3 py-2.5">
+        <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/50 mb-1.5">{m.label}</p>
+        <p className="flex items-baseline gap-1">
+          <span className={T.metricL}>
+            {m.value != null ? Number(m.value).toFixed(m.digits) : '—'}
+          </span>
+          {m.unit && <span className="text-[11px] text-black/50 font-medium">{m.unit}</span>}
+        </p>
+      </div>
+    ))}
+  </div>
+
+  <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 mb-2">Per phase</p>
+  <div className="flex flex-col gap-3.5">
+    {[
+      { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
+      { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
+      { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
+    ].map((row) => {
+      const peak = Math.max(
+        overview?.grid.current_a ?? 0,
+        overview?.grid.current_b ?? 0,
+        overview?.grid.current_c ?? 0,
+        0.001,
+      )
+      const pct = Math.min(100, ((row.current ?? 0) / peak) * 100)
+      return (
+        <div key={row.phase}>
+          <div className="flex items-baseline justify-between gap-3 mb-1.5">
+            <span className="text-[13px] font-semibold text-black">{row.phase}</span>
+            <div className="flex items-baseline gap-4">
+              <span className="flex items-baseline gap-1">
+                <span className="text-[14px] font-semibold tabular-nums text-black">
+                  {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
+                </span>
+                <span className="text-[10px] text-black/40">kV</span>
+              </span>
+              <span className="flex items-baseline gap-1 w-[68px] justify-end">
+                <span className="text-[14px] font-semibold tabular-nums text-[#497d00]">
+                  {row.current?.toFixed(2) ?? '—'}
+                </span>
+                <span className="text-[10px] text-black/40">A</span>
+              </span>
             </div>
           </div>
+          <div className="h-[3px] w-full rounded-full bg-black/[0.06] overflow-hidden">
+            <div className="h-full rounded-full bg-[#497d00] transition-[width] duration-500" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      )
+    })}
+  </div>
+</div>
         </div>
       </Section>
 
@@ -1600,7 +1660,6 @@ export default function PlantOverviewPage() {
           >
             <PowerTrendCard
               chartData={chartData}
-              chartConfig={chartConfig}
               trendLoading={trendLoading}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
@@ -1608,6 +1667,7 @@ export default function PlantOverviewPage() {
               expanded={chartExpanded}
               onToggle={() => setChartExpanded(false)}
               height="h-[480px]"
+              isMobile={isMobile}
             />
           </div>
         </div>,
