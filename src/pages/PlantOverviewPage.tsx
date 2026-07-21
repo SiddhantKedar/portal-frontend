@@ -151,11 +151,6 @@ function todayString() {
   return new Date().toISOString().split('T')[0]
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
 function formatDateTick(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' })
@@ -373,6 +368,42 @@ function PowerTrendTooltip({ active, payload }: any) {
   )
 }
 
+const ELEC_UNITS: Record<string, { unit: string; dp: number }> = {
+  voltage: { unit: 'kV', dp: 2 },
+  current: { unit: 'A', dp: 1 },
+  frequency: { unit: 'Hz', dp: 2 },
+}
+
+function elecUnitFor(dataKey: string) {
+  if (dataKey.startsWith('voltage')) return ELEC_UNITS.voltage
+  if (dataKey.startsWith('current')) return ELEC_UNITS.current
+  return ELEC_UNITS.frequency
+}
+
+function ElectricalTrendTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+  const t = payload[0]?.payload?.time
+  return (
+    <div className="rounded-lg border border-black bg-white px-3 py-2 min-w-[190px]">
+      <p className="text-[12px] font-semibold text-black mb-1.5">
+        {typeof t === 'number' ? formatMinutesTick(t) : ''}
+      </p>
+      {payload.map((e: any) => {
+        const u = elecUnitFor(e.dataKey as string)
+        return (
+          <div key={e.dataKey} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
+            <span className="text-[12px] text-black/50">{e.name}</span>
+            <span className="text-[12px] font-semibold tabular-nums text-black ml-auto">
+              {e.value == null ? '—' : Number(e.value).toFixed(u.dp)}
+            </span>
+            <span className="text-[11px] text-black/50 w-9 text-right">{u.unit}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function PerformanceCards({
   actualToday, generationTarget, performanceRatio, cuf,
@@ -798,9 +829,9 @@ const ELEC_GROUPS = [
 
 function ElectricalTrendCard({
   chartData, trendLoading, selectedDate, setSelectedDate,
-  hidden, onSeriesToggle, expanded, onToggleExpand, height,
+  hidden, onSeriesToggle, expanded, onToggleExpand, height, isMobile,
 }: {
-  chartData: { time: string; [key: string]: number | string | null }[]
+  chartData: { time: number; [key: string]: number | null }[]
   trendLoading: boolean
   selectedDate: string
   setSelectedDate: (d: string) => void
@@ -809,6 +840,7 @@ function ElectricalTrendCard({
   expanded: boolean
   onToggleExpand: () => void
   height: string
+  isMobile: boolean
 }) {
   return (
     <div className={expanded ? 'px-6 pt-5 pb-5' : ''}>
@@ -855,40 +887,50 @@ function ElectricalTrendCard({
       ) : (
         <div className={`${height} w-full`}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 56, left: 52, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 12, fill: '#171717' }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                yAxisId="voltage"
-                domain={['auto', 'auto']}
-                tick={{ fontSize: 12, fill: '#171717' }}
-                tickLine={false}
-                axisLine={false}
-                width={60}
-                tickFormatter={(v) => `${Number(v).toFixed(1)}kV`}
-              />
-              <YAxis
-                yAxisId="current"
-                orientation="right"
-                tick={{ fontSize: 12, fill: '#171717' }}
-                tickLine={false}
-                axisLine={false}
-                width={48}
-                tickFormatter={(v) => `${Number(v).toFixed(0)}A`}
-              />
-              <YAxis yAxisId="freq" hide domain={[45, 55]} />
-              <Tooltip
-                contentStyle={{
-                  fontSize: '13px', color: '#000', border: '1px solid #000',
-                  borderRadius: '8px', boxShadow: 'none', fontWeight: 500,
-                }}
-              />
+            <ComposedChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+            <XAxis
+              dataKey="time"
+              type="number"
+              scale="linear"
+              domain={[0, 1440]}
+              allowDataOverflow
+              ticks={isMobile ? DAY_TICKS_MOBILE : DAY_TICKS}
+              tickFormatter={formatMinutesTick}
+              tick={{ fontSize: 12, fill: '#171717' }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+            yAxisId="voltage"
+            domain={[
+              (dataMin: number) => Math.floor(dataMin * 2) / 2 - 0.5,
+              (dataMax: number) => Math.ceil(dataMax * 2) / 2 + 0.5,
+            ]}
+            tickCount={5}
+            tickFormatter={(v) => Number(v).toFixed(1)}
+            tick={{ fontSize: 12, fill: '#e17100' }}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+          />
+            <YAxis
+              yAxisId="current"
+              orientation="right"
+              domain={[0, 'auto']}
+              tick={{ fontSize: 12, fill: '#497d00' }}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+            />
+            {!hidden.has('frequency') && (
+              <YAxis yAxisId="freq" orientation="right" hide domain={[45, 55]} />
+            )}
+            <Tooltip
+              cursor={{ stroke: '#00000022', strokeWidth: 1 }}
+              content={<ElectricalTrendTooltip />}
+            />
+
               {!hidden.has('voltage') && (
                 <>
                   <Line yAxisId="voltage" type="monotone" dataKey="voltage_ab" name="Voltage AB" stroke="#e17100" strokeWidth={1.5} dot={false} connectNulls={false} activeDot={{ r: 4, fill: '#e17100' }} />
@@ -1176,16 +1218,41 @@ export default function PlantOverviewPage() {
     return out
   }, [trend, selectedDate])
 
-  const elecChartData = elecTrend.map((p) => ({
-    time: formatTime(p.time),
-    voltage_ab: +(p.voltage_line_ab_v / 1000).toFixed(2),
-    voltage_bc: +(p.voltage_line_bc_v / 1000).toFixed(2),
-    voltage_ca: +(p.voltage_line_ca_v / 1000).toFixed(2),
-    current_a: p.current_phase_a,
-    current_b: p.current_phase_b,
-    current_c: p.current_phase_c,
-    frequency: p.grid_frequency_hz,
-  }))
+  const ELEC_TREND_INTERVAL_MIN = 5  // must match the &interval=5 query param
+
+  const elecChartData = useMemo(() => {
+    const nz = (v: number | null | undefined) =>
+      v == null || v === 0 ? null : v
+
+    const pts = elecTrend
+      .map((p) => ({
+        time: minutesFromIstDayStart(p.time, elecSelectedDate),
+        voltage_ab: p.voltage_line_ab_v == null ? null : +(p.voltage_line_ab_v / 1000).toFixed(3),
+        voltage_bc: p.voltage_line_bc_v == null ? null : +(p.voltage_line_bc_v / 1000).toFixed(3),
+        voltage_ca: p.voltage_line_ca_v == null ? null : +(p.voltage_line_ca_v / 1000).toFixed(3),
+        current_a: nz(p.current_phase_a),
+        current_b: nz(p.current_phase_b),
+        current_c: nz(p.current_phase_c),
+        frequency: nz(p.grid_frequency_hz),
+      }))
+      .filter((p) => p.time >= 0 && p.time <= 1440)
+      .sort((a, b) => a.time - b.time)
+
+    const out: typeof pts = []
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[i - 1]
+      if (prev && pts[i].time - prev.time > ELEC_TREND_INTERVAL_MIN * GAP_FACTOR) {
+        out.push({
+          time: prev.time + ELEC_TREND_INTERVAL_MIN,
+          voltage_ab: null, voltage_bc: null, voltage_ca: null,
+          current_a: null, current_b: null, current_c: null,
+          frequency: null,
+        })
+      }
+      out.push(pts[i])
+    }
+    return out
+  }, [elecTrend, elecSelectedDate])
 
   const dailyEnergyChartData = dailyEnergy.map((d) => ({
     date: d.date,
@@ -1600,6 +1667,7 @@ export default function PlantOverviewPage() {
           expanded={elecExpanded}
           onToggleExpand={() => setElecExpanded(o => !o)}
           height="h-[280px]"
+          isMobile={isMobile}
         />
       </Section>
 
@@ -1624,6 +1692,7 @@ export default function PlantOverviewPage() {
               expanded={elecExpanded}
               onToggleExpand={() => setElecExpanded(false)}
               height="h-[480px]"
+              isMobile={isMobile}
             />
           </div>
         </div>,
