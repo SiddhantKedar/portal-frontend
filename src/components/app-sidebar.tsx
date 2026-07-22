@@ -44,7 +44,9 @@ export function AppSidebar() {
 
   const inverters = devices
     .filter((d) => d.device_type === 'INVERTER' && d.is_active)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) =>
+      a.influx_device_id.localeCompare(b.influx_device_id, undefined, { numeric: true })
+    )
 
   const hasMeters = devices.some((d) => d.device_type === 'METER' && d.is_active)
 
