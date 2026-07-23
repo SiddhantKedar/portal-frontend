@@ -301,7 +301,9 @@ const fetchOverview = useCallback(async () => {
     if (!site?.id) { setLoading(false); return }
     try {
       const res = await api.get<InverterOverview>(`/influx/inverter/overview/?site=${site.id}`)
-      res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
+      res.data.inverters.sort((a, b) =>
+        a.device_id.localeCompare(b.device_id, undefined, { numeric: true })
+      )
       setOverview(res.data)
     } catch (err) {
       console.error('Inverter overview error:', err)
