@@ -42,6 +42,7 @@ interface PlantOverview {
     energy_today_kwh: number
     energy_active_export_kwh: number
     frequency_hz: number
+    reactive_power_kvar: number
     power_factor: number
     ac_capacity_kw: number
     dc_capacity_kw: number
@@ -689,12 +690,19 @@ function Section({
   return <section className="pt-6">{children}</section>
 }
 
+
+const POWER_GROUPS = [
+  { key: 'power',       label: 'Active Power', color: '#e17100' },
+  { key: 'irradiation', label: 'Irradiance',   color: '#497d00' },
+]
+
+
 // ============================================================
 // Power Trend
 // ============================================================
 function PowerTrendCard({
   chartData, trendLoading, selectedDate, setSelectedDate,
-  stats, expanded, onToggle, height, isMobile,
+  stats, expanded, onToggle, height, isMobile, hidden, onSeriesToggle,
 }: {
   chartData: { time: number; power: number | null; irradiation: number | null }[]
   trendLoading: boolean
@@ -705,6 +713,8 @@ function PowerTrendCard({
   onToggle: () => void
   height: string
   isMobile: boolean
+  hidden: Set<string>
+  onSeriesToggle: (key: string) => void
 }) {
   return (
     <div className={expanded ? 'px-6 pt-5 pb-5' : ''}>
@@ -721,6 +731,27 @@ function PowerTrendCard({
           </>
         }
       />
+      {/* Series checkboxes */}
+      <div className="flex items-center gap-4 sm:gap-5 mb-4 flex-wrap">
+        {POWER_GROUPS.map((g) => (
+          <button key={g.key} type="button" onClick={() => onSeriesToggle(g.key)} className="flex items-center gap-1.5">
+            <span
+              className="w-4 h-4 rounded-[4px] border flex items-center justify-center transition-colors"
+              style={{
+                backgroundColor: hidden.has(g.key) ? 'transparent' : g.color,
+                borderColor: hidden.has(g.key) ? '#D4D4D4' : g.color,
+              }}
+            >
+              {!hidden.has(g.key) && (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </span>
+            <span className="text-[13px] text-black font-semibold">{g.label}</span>
+          </button>
+        ))}
+      </div>
       {trendLoading ? (
         <div className={`${height} flex items-center justify-center`}>
           <p className={T.meta}>Loading chart…</p>
@@ -768,6 +799,7 @@ function PowerTrendCard({
                 width={44}
               />
               <Tooltip cursor={{ stroke: '#00000022', strokeWidth: 1 }} content={<PowerTrendTooltip />} />
+              {!hidden.has('irradiation') && (
               <Line
                 yAxisId="irr"
                 type="monotone"
@@ -781,6 +813,8 @@ function PowerTrendCard({
                 isAnimationActive={false}
                 activeDot={{ r: 3.5, fill: "#497d00" }}
               />
+            )}
+            {!hidden.has('power') && (
               <Area
                 yAxisId="power"
                 type="monotone"
@@ -795,6 +829,7 @@ function PowerTrendCard({
                 isAnimationActive={false}
                 activeDot={{ r: 4, fill: '#e17100' }}
               />
+            )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -808,9 +843,9 @@ function PowerTrendCard({
             ))}
           </div>
           {[
-            { name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw },
-            { name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2 },
-          ].map((g) => (
+            { key: 'power',       name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw },
+            { key: 'irradiation', name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2 },
+          ].filter((g) => !hidden.has(g.key)).map((g) => (
             <div key={g.name} className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] items-baseline py-1">
               <span className="flex items-baseline gap-2 min-w-0">
                 <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: g.color }} />
@@ -1124,6 +1159,8 @@ export default function PlantOverviewPage() {
     new Set(['current', 'frequency'])
   )
 
+  const [powerHidden, setPowerHidden] = useState<Set<string>>(new Set())
+
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyPoint[]>([])
   const [dailyEnergyLoading, setDailyEnergyLoading] = useState(false)
 
@@ -1156,6 +1193,14 @@ export default function PlantOverviewPage() {
       return next
     })
   }
+
+  function togglePower(group: string) {
+  setPowerHidden((prev) => {
+    const next = new Set(prev)
+    next.has(group) ? next.delete(group) : next.add(group)
+    return next
+  })
+}
 
   // Near the top of the file, with your other constants
   const SHOW_DAILY_ENERGY_CARD = false // temporarily disabled — bar width/centering needs another pass
@@ -1650,6 +1695,8 @@ const fetchElecTrend = useCallback(async () => {
           onToggle={() => setChartExpanded(o => !o)}
           height="h-[240px] sm:h-[360px]"
           isMobile={isMobile}
+          hidden={powerHidden}
+          onSeriesToggle={togglePower}
         />
       </Section>
 
@@ -1661,43 +1708,52 @@ const fetchElecTrend = useCallback(async () => {
           meta={overview?.last_updated ? `Last Updated : ${formatLastUpdated(overview.last_updated)}` : 'No data'}
           accent="olive"
         />
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
+{/* System scalars — borderless strip, single line on mobile */}
+        <div className="flex items-end justify-between sm:justify-start gap-x-3 sm:gap-x-10 pb-5 border-b border-black/10">
           {[
-            { label: 'Frequency', primary: overview?.plant.frequency_hz?.toFixed(2) ?? '—', unit: 'Hz' },
-            { label: 'Power Factor', primary: overview?.plant.power_factor?.toFixed(2) ?? '—', unit: '' },
+            { label: 'Frequency', value: overview?.plant.frequency_hz?.toFixed(2) ?? '—', unit: 'Hz' },
+            { label: 'Power Factor', value: overview?.plant.power_factor?.toFixed(2) ?? '—', unit: '' },
+            { label: 'Reactive Power', value: overview?.plant.reactive_power_kvar?.toFixed(1) ?? '—', unit: 'kVAR' },
           ].map((m) => (
-            <div key={m.label} className="border border-black/15 rounded-lg px-3.5 py-3">
-              <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/50 mb-2">{m.label}</p>
-              <p className="flex items-baseline gap-1">
-                <span className={T.metricL}>{m.primary}</span>
-                {m.unit && <span className="text-[11px] text-black/50 font-medium">{m.unit}</span>}
+            <div key={m.label} className="min-w-0">
+              <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.12em] font-semibold text-black/50 mb-1.5 whitespace-nowrap">
+                {m.label}
+              </p>
+              <p className="flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-[18px] sm:text-[22px] font-semibold text-black tracking-tight tabular-nums leading-none">
+                  {m.value}
+                </span>
+                {m.unit && <span className="text-[10px] sm:text-[11px] text-black/50 font-medium">{m.unit}</span>}
               </p>
             </div>
           ))}
+        </div>
+
+        {/* Phase ledger */}
+        <div className="mt-5">
+          <div className="grid grid-cols-[1fr_1fr_1fr] pb-2 border-b border-black/15">
+            <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Phase</span>
+            <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Voltage</span>
+            <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Current</span>
+          </div>
           {[
             { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
             { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
             { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
           ].map((row) => (
-            <div key={row.phase} className="flex gap-3 border border-black/15 rounded-lg px-3.5 py-3">
-              <span className="w-[3px] rounded-full self-stretch shrink-0 bg-[#497d00]" />
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/50 mb-2">
-                  Phase {row.phase}
-                </p>
-                <div className="flex items-baseline gap-4">
-                  <span className="flex items-baseline gap-1">
-                    <span className={T.metricM}>
-                      {row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}
-                    </span>
-                    <span className="text-[10px] text-black/50">kV</span>
-                  </span>
-                  <span className="flex items-baseline gap-1">
-                    <span className={`${T.metricM} text-[#497d00]`}>{row.current?.toFixed(2) ?? '—'}</span>
-                    <span className="text-[10px] text-black/50">A</span>
-                  </span>
-                </div>
-              </div>
+            <div key={row.phase} className="grid grid-cols-[1fr_1fr_1fr] items-baseline py-3.5 border-b border-black/[0.06] last:border-0">
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#497d00] shrink-0" />
+                <span className="text-[13px] font-semibold text-black">Phase {row.phase}</span>
+              </span>
+              <span className="flex items-baseline justify-end gap-1">
+                <span className={T.metricM}>{row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}</span>
+                <span className="text-[10px] text-black/50">kV</span>
+              </span>
+              <span className="flex items-baseline justify-end gap-1">
+                <span className={`${T.metricM} text-[#497d00]`}>{row.current?.toFixed(2) ?? '—'}</span>
+                <span className="text-[10px] text-black/50">A</span>
+              </span>
             </div>
           ))}
         </div>
@@ -1779,6 +1835,8 @@ const fetchElecTrend = useCallback(async () => {
               onToggle={() => setChartExpanded(false)}
               height="h-[480px]"
               isMobile={isMobile}
+              hidden={powerHidden}
+              onSeriesToggle={togglePower}
             />
           </div>
         </div>,
