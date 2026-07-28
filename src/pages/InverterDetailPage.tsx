@@ -52,6 +52,7 @@ interface InverterDetail {
   grid_voltage_ab_v: number
   grid_voltage_bc_v: number
   grid_voltage_ca_v: number
+  dc_input_voltage_v: number
   status: string
   last_updated: string | null
 }
@@ -737,6 +738,7 @@ export default function InverterDetailPage() {
               <DetailRow label="Voltage A-B" value={detail ? detail.grid_voltage_ab_v.toFixed(1) : '—'} unit="V" />
               <DetailRow label="Voltage B-C" value={detail ? detail.grid_voltage_bc_v.toFixed(1) : '—'} unit="V" />
               <DetailRow label="Voltage C-A" value={detail ? detail.grid_voltage_ca_v.toFixed(1) : '—'} unit="V" />
+              <DetailRow label="DC Input Voltage" value={detail ? detail.dc_input_voltage_v.toFixed(1) : '—'} unit="V" />
               <DetailRow label="Frequency" value={detail?.grid_frequency_hz.toFixed(2) ?? '—'} unit="Hz" />
               <DetailRow label="Power Factor" value={detail?.ac_power_factor.toFixed(2) ?? '—'} />
               <DetailRow label="Reactive Power" value={detail?.ac_reactive_power_kvar.toFixed(2) ?? '—'} unit="kVAR" />
