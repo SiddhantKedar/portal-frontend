@@ -700,25 +700,23 @@ const POWER_GROUPS = [
 // Inverter 
 type InverterRow = PlantOverview['inverters'][number]
 
-const INV_COLS = 'grid grid-cols-[1fr_84px_84px] sm:grid-cols-[1fr_1fr_120px_120px]'
+const INV_COLS = 'grid grid-cols-[1fr_84px] sm:grid-cols-[1fr_1fr_120px]'
 
 function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   if (!inverters.length) {
     return <p className="text-[13px] text-black/50 py-4">No inverters reporting.</p>
   }
 
-  const rows = [...inverters].sort((a, b) => (b.active_power_kw ?? 0) - (a.active_power_kw ?? 0))
+  const rows = [...inverters].sort((a, b) =>
+    a.device_id.localeCompare(b.device_id, undefined, { numeric: true })
+  )
   const peak = Math.max(...rows.map((r) => r.active_power_kw ?? 0), 0)
-  const totalKw = rows.reduce((s, r) => s + (r.active_power_kw ?? 0), 0)
-  const totalToday = rows.reduce((s, r) => s + (r.daily_gen_kwh ?? 0), 0)
-
   return (
     <div>
       <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
         <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Inverter</span>
         <span className="hidden sm:block text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Output</span>
         <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Power</span>
-        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Today</span>
       </div>
 
       {rows.map((inv) => {
@@ -745,28 +743,11 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
               <span className={`${T.metricM} ${online ? '' : 'text-black/40'}`}>{kw.toFixed(1)}</span>
               <span className="text-[10px] text-black/50">kW</span>
             </span>
-            <span className="flex items-baseline justify-end gap-1">
-              <span className={`${T.metricM} ${online ? 'text-[#497d00]' : 'text-black/40'}`}>
-                {(inv.daily_gen_kwh ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-              </span>
-              <span className="text-[10px] text-black/50">kWh</span>
-            </span>
           </div>
         )
       })}
 
-      <div className={`${INV_COLS} items-baseline pt-3 border-t border-black/15`}>
-        <span className="text-[11px] uppercase tracking-[0.1em] font-semibold text-black/50">Total</span>
-        <span className="hidden sm:block" />
-        <span className="flex items-baseline justify-end gap-1">
-          <span className={T.metricM}>{totalKw.toFixed(1)}</span>
-          <span className="text-[10px] text-black/50">kW</span>
-        </span>
-        <span className="flex items-baseline justify-end gap-1">
-          <span className={T.metricM}>{totalToday.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-          <span className="text-[10px] text-black/50">kWh</span>
-        </span>
-      </div>
+      
     </div>
   )
 }
@@ -1289,7 +1270,9 @@ export default function PlantOverviewPage() {
     if (!site?.id) { setLoading(false); return }
     try {
       const res = await api.get<PlantOverview>(`/influx/plant/overview/?site=${site.id}`)
-      res.data.inverters.sort((a, b) => a.name.localeCompare(b.name))
+      res.data.inverters.sort((a, b) =>
+        a.device_id.localeCompare(b.device_id, undefined, { numeric: true })
+      )
       setOverview(res.data)
     } catch (err) {
       console.error('Plant overview error:', err)
