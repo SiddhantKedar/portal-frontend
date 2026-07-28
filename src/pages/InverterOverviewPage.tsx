@@ -440,9 +440,9 @@ const fetchOverview = useCallback(async () => {
                 </div>
                 <div className="h-1.5 bg-black/[0.06] rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full`}
-                    style={{ width: `${Math.min(100, Math.max(0, overallPR))}%` }}
-                  />
+  className="h-full rounded-full"
+  style={{ width: `${Math.min(100, Math.max(0, overallPR))}%`, background: '#e17100' }}
+/>
                 </div>
                 <p className="text-[11px] text-black/40 mt-1.5 tabular-nums">
                   Target ≥ 78% · {overview?.summary.online_count ?? 0} inverters live

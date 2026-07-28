@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Sun, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu,TrendingUp, Leaf
+  Sun, SunMedium, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu, TrendingUp, Leaf,
 } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
 import {
@@ -696,6 +696,80 @@ const POWER_GROUPS = [
   { key: 'irradiation', label: 'Irradiance',   color: '#497d00' },
 ]
 
+
+// Inverter 
+type InverterRow = PlantOverview['inverters'][number]
+
+const INV_COLS = 'grid grid-cols-[1fr_84px_84px] sm:grid-cols-[1fr_1fr_120px_120px]'
+
+function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
+  if (!inverters.length) {
+    return <p className="text-[13px] text-black/50 py-4">No inverters reporting.</p>
+  }
+
+  const rows = [...inverters].sort((a, b) => (b.active_power_kw ?? 0) - (a.active_power_kw ?? 0))
+  const peak = Math.max(...rows.map((r) => r.active_power_kw ?? 0), 0)
+  const totalKw = rows.reduce((s, r) => s + (r.active_power_kw ?? 0), 0)
+  const totalToday = rows.reduce((s, r) => s + (r.daily_gen_kwh ?? 0), 0)
+
+  return (
+    <div>
+      <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
+        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Inverter</span>
+        <span className="hidden sm:block text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Output</span>
+        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Power</span>
+        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Today</span>
+      </div>
+
+      {rows.map((inv) => {
+        const online = inv.status === 'online'
+        const kw = inv.active_power_kw ?? 0
+        const pct = peak > 0 ? (kw / peak) * 100 : 0
+        return (
+          <div key={inv.device_id} className={`${INV_COLS} items-center py-3.5 border-b border-black/[0.06] last:border-0`}>
+            <span className="flex items-center gap-2 min-w-0 pr-3">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? 'bg-[#22C55E]' : 'bg-red-600'}`} />
+              <span className="text-[13px] font-semibold text-black truncate">{inv.name}</span>
+            </span>
+
+            <span className="hidden sm:flex items-center pr-6">
+              <span className="h-1.5 w-full bg-black/[0.06] rounded-full overflow-hidden">
+                <span
+                  className="block h-full rounded-full"
+                  style={{ width: `${pct}%`, background: online ? '#497d00' : 'rgba(0,0,0,0.2)' }}
+                />
+              </span>
+            </span>
+
+            <span className="flex items-baseline justify-end gap-1">
+              <span className={`${T.metricM} ${online ? '' : 'text-black/40'}`}>{kw.toFixed(1)}</span>
+              <span className="text-[10px] text-black/50">kW</span>
+            </span>
+            <span className="flex items-baseline justify-end gap-1">
+              <span className={`${T.metricM} ${online ? 'text-[#497d00]' : 'text-black/40'}`}>
+                {(inv.daily_gen_kwh ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+              </span>
+              <span className="text-[10px] text-black/50">kWh</span>
+            </span>
+          </div>
+        )
+      })}
+
+      <div className={`${INV_COLS} items-baseline pt-3 border-t border-black/15`}>
+        <span className="text-[11px] uppercase tracking-[0.1em] font-semibold text-black/50">Total</span>
+        <span className="hidden sm:block" />
+        <span className="flex items-baseline justify-end gap-1">
+          <span className={T.metricM}>{totalKw.toFixed(1)}</span>
+          <span className="text-[10px] text-black/50">kW</span>
+        </span>
+        <span className="flex items-baseline justify-end gap-1">
+          <span className={T.metricM}>{totalToday.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+          <span className="text-[10px] text-black/50">kWh</span>
+        </span>
+      </div>
+    </div>
+  )
+}
 
 // ============================================================
 // Power Trend
@@ -1490,62 +1564,72 @@ const fetchElecTrend = useCallback(async () => {
 
             {/* Energy rail — each metric now gets an icon, and a small descriptive
                 subtext to add substance beyond just a number */}
+              {/* Energy rail — Energy Today · POA Today · CO₂ Avoided · Energy Total */}
             <div className="flex flex-col">
-              <div className="flex items-center justify-between gap-4 py-5 border-b border-black/10">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-[#e17100]/10 flex items-center justify-center shrink-0">
-                    <Sun size={18} className="text-[#e17100]" strokeWidth={2} />
+              {[
+                {
+                  label: 'Energy Today',
+                  sub: 'Generated since morning',
+                  icon: Sun,
+                  tone: '#e17100',
+                  value: overview?.plant.energy_today_kwh?.toLocaleString() ?? '—',
+                  unit: 'kWh',
+                },
+                {
+                  label: 'POA Today',
+                  sub: 'Plane-of-array irradiation',
+                  icon: SunMedium,
+                  tone: '#497d00',
+                  value: overview?.performance?.poa_irradiation_kwh_m2?.toFixed(2) ?? '—',
+                  unit: 'kWh/m²',
+                },
+                {
+                  label: 'CO₂ Avoided Today',
+                  sub: 'Equivalent emissions offset',
+                  icon: Leaf,
+                  tone: '#497d00',
+                  value: overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—',
+                  unit: 'kg',
+                },
+                {
+                  label: 'Energy Total',
+                  sub: 'Lifetime cumulative export',
+                  icon: TrendingUp,
+                  tone: null as string | null,
+                  value:
+                    overview?.plant.energy_active_export_kwh != null
+                      ? (overview.plant.energy_active_export_kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                      : '—',
+                  unit: 'MWh',
+                },
+              ].map((m, i, arr) => {
+                const Icon = m.icon
+                return (
+                  <div
+                    key={m.label}
+                    className={`flex items-center justify-between gap-4 py-5 ${i < arr.length - 1 ? 'border-b border-black/10' : ''}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ background: m.tone ? `${m.tone}1A` : 'rgba(0,0,0,0.05)' }}
+                      >
+                        <Icon size={18} style={{ color: m.tone ?? '#000' }} strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={T.eyebrow}>{m.label}</p>
+                        <p className="text-[12px] text-black/50 mt-0.5">{m.sub}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 shrink-0">
+                      <span className={T.metricL} style={m.tone ? { color: m.tone } : undefined}>
+                        {m.value}
+                      </span>
+                      <span className={T.unit}>{m.unit}</span>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className={T.eyebrow}>Energy Today</p>
-                    <p className="text-[12px] text-black/50 mt-0.5">Generated since morning</p>
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-1.5 shrink-0">
-                  <span className={`${T.metricL} text-[#e17100]`}>
-                    {overview?.plant.energy_today_kwh?.toLocaleString() ?? '—'}
-                  </span>
-                  <span className={T.unit}>kWh</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-4 py-5 border-b border-black/10">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-black/5 flex items-center justify-center shrink-0">
-                    <TrendingUp size={18} className="text-black" strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className={T.eyebrow}>Energy Total</p>
-                    <p className="text-[12px] text-black/50 mt-0.5">Lifetime cumulative export</p>
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className={T.metricL}>
-                  {overview?.plant.energy_active_export_kwh != null
-                    ? (overview.plant.energy_active_export_kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })
-                    : '—'}
-                </span>
-                <span className={T.unit}>MWh</span>
-              </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-4 py-5">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-[#497d00]/10 flex items-center justify-center shrink-0">
-                    <Leaf size={18} className="text-[#497d00]" strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className={T.eyebrow}>CO₂ Avoided Today</p>
-                    <p className="text-[12px] text-black/50 mt-0.5">Equivalent emissions offset</p>
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-1.5 shrink-0">
-                  <span className={`${T.metricL} text-[#497d00]`}>
-                    {overview?.performance?.co2_avoided_today_kg?.toFixed(1) ?? '—'}
-                  </span>
-                  <span className={T.unit}>kg</span>
-                </div>
-              </div>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -1578,7 +1662,7 @@ const fetchElecTrend = useCallback(async () => {
                     <p className={T.eyebrow}>Solar Irradiance</p>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className={`${T.metricXL} ${weatherIntensity.tone}`}>
-                        {overview.weather.irradiation_inclined_wm2.toFixed(0)}
+                        {Math.max(0, overview.weather.irradiation_inclined_wm2).toFixed(0)}
                       </span>
                       <span className={T.unit}>W/m²</span>
                     </div>
@@ -1669,6 +1753,18 @@ const fetchElecTrend = useCallback(async () => {
           </Section>
         </>
       )}
+
+      {/* ============ INVERTERS ============ */}
+      <Divider />
+      <Section>
+        <SectionHeader
+          title="Inverters"
+          meta={`${overview?.device_summary.online ?? 0} of ${overview?.device_summary.total ?? 0} online`}
+          accent="olive"
+        />
+        <InverterLedger inverters={overview?.inverters ?? []} />
+      </Section>
+
 
       {/* ============ PERFORMANCE (GenerationCards) ============ */}
       <Divider />
