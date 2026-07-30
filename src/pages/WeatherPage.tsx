@@ -136,7 +136,7 @@ function StatusChip({ status }: { status: string }) {
 // Rays grow, brighten, and rotate based on irradiance.
 // At genuine night (clock-based + low irradiance) it becomes a subtle moon.
 // ============================================================
-function AnimatedSun({ irradiance }: { irradiance: number }) {
+function AnimatedSun({ irradiance, isOffline = false }: { irradiance: number; isOffline?: boolean }) {
   // Only render the moon when BOTH the clock says it's night AND irradiance is
   // low. This prevents an offline/dead station (which reports 0 W/m²) from
   // showing a moon in the middle of the day.
@@ -147,17 +147,45 @@ function AnimatedSun({ irradiance }: { irradiance: number }) {
   const rayOpacity = 0.35 + intensityPct * 0.6
   const coreSize = 32 + intensityPct * 6
 
+  if (isOffline) {
+    return (
+      <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+        <svg viewBox="0 0 160 160" className="absolute inset-0 w-full h-full">
+          {[...Array(12)].map((_, i) => {
+            const angle = (i * 30 * Math.PI) / 180
+            const innerR = 32 / 2 + 6
+            const outerR = innerR + 8
+            const x1 = 80 + innerR * Math.cos(angle)
+            const y1 = 80 + innerR * Math.sin(angle)
+            const x2 = 80 + outerR * Math.cos(angle)
+            const y2 = 80 + outerR * Math.sin(angle)
+            return (
+              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="#D4D4D4" strokeWidth={2.5} strokeLinecap="round" />
+            )
+          })}
+        </svg>
+        <div
+          className="rounded-full flex items-center justify-center"
+          style={{ width: 32 * 1.6, height: 32 * 1.6, background: '#E5E5E5' }}
+        >
+          <Sun size={32 * 0.65} className="text-black/30" strokeWidth={1.5} />
+        </div>
+      </div>
+    )
+  }
+
 if (isNight) {
   const stars = [
-      { cx: 24, cy: 34, r: 1.8, delay: '0s'   },
-      { cx: 136, cy: 28, r: 1.4, delay: '0.7s' },
-      { cx: 18, cy: 112, r: 1.5, delay: '1.4s' },
-      { cx: 142, cy: 104, r: 1.9, delay: '0.4s' },
-      { cx: 50, cy: 146, r: 1.3, delay: '1.8s' },
-      { cx: 116, cy: 140, r: 1.4, delay: '1.1s' },
-      { cx: 82, cy: 18, r: 1.2, delay: '2.1s' },
-      { cx: 8, cy: 72, r: 1.1, delay: '0.9s' },
-      { cx: 150, cy: 66, r: 1.2, delay: '1.6s' },
+      { cx: 24, cy: 34, r: 2.4, delay: '0s' },
+      { cx: 136, cy: 28, r: 1.9, delay: '0.7s' },
+      { cx: 18, cy: 112, r: 2.1, delay: '1.4s' },
+      { cx: 142, cy: 104, r: 2.5, delay: '0.4s' },
+      { cx: 50, cy: 146, r: 1.9, delay: '1.8s' },
+      { cx: 116, cy: 140, r: 2.0, delay: '1.1s' },
+      { cx: 82, cy: 18, r: 1.6, delay: '2.1s' },
+      { cx: 8, cy: 72, r: 1.3, delay: '0.9s' },
+      { cx: 150, cy: 66, r: 1.7, delay: '1.6s' },
     ]
   return (
     <div className="relative w-[160px] h-[160px] flex items-center justify-center">
@@ -467,8 +495,11 @@ export default function WeatherPage() {
     )
   }
 
-  const irr = data?.irradiation_inclined_wm2 ?? 0
-  const intensity = irradianceIntensity(irr)
+  const irr = Math.max(0, data?.irradiation_inclined_wm2 ?? 0)
+  const isOffline = data?.status !== 'online'
+  const intensity = isOffline
+    ? { label: 'Offline', tone: 'text-black/40', pct: 0 }
+    : irradianceIntensity(irr)
   const wind = windIntensity(data?.wind_speed_ms ?? 0)
   const delta = data ? data.module_temp_c - data.ambient_temp_c : 0
   const deltaSign = delta > 0 ? '+' : ''
@@ -524,7 +555,7 @@ export default function WeatherPage() {
 
           {/* Animated sun */}
           <div className="flex justify-center md:justify-start">
-            <AnimatedSun irradiance={irr} />
+            <AnimatedSun irradiance={irr} isOffline={isOffline} />
           </div>
 
           {/* Irradiance number + scale */}

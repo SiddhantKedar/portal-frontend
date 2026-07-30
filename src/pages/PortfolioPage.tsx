@@ -114,7 +114,7 @@ function HealthFooter({ online, total }: { online: number; total: number }) {
     <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
       <span className={`w-1.5 h-1.5 rounded-full ${allGood ? 'bg-green-500' : 'bg-[#e17100]'}`} />
       <span className={allGood ? 'text-green-700' : 'text-[#e17100]'}>
-        {allGood ? 'All operational' : `${total - online} offline`}
+        {allGood ? 'All Online' : `${total - online} offline`}
       </span>
     </span>
   )
@@ -211,7 +211,7 @@ function SiteRow({
     <button
       type="button"
       onClick={() => navigate(`/sites/${site.site_id}/plant`)}
-      className="group w-full text-left flex items-center gap-4 px-5 py-4 hover:bg-black/[0.02] transition-colors"
+      className="group w-full text-left flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 hover:bg-black/[0.02] transition-colors"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -240,20 +240,40 @@ function SiteRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-5 sm:gap-7 shrink-0 tabular-nums">
+      {/* Mobile stat strip — full-width row, larger type, fills the space
+          that the boxed desktop columns leave empty on small screens */}
+      <div className="flex sm:hidden items-center justify-between w-full pl-[2px]">
+        <span className="text-[13px] font-semibold text-black tabular-nums">
+          {site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span>
+        </span>
+        <span className="text-[13px] font-semibold text-black tabular-nums">
+          {site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span>
+        </span>
+        {hasInverters ? (
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold tabular-nums">
+            <span className={`w-1.5 h-1.5 rounded-full ${invHealthy ? 'bg-[#497d00]' : 'bg-[#e17100]'}`} />
+            <span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span>
+            <span className="text-black/40 text-[11px]">/{site.inverters_total}</span>
+          </span>
+        ) : (
+          <span className="text-[13px] text-black/30">— inv</span>
+        )}
+      </div>
+
+      <div className="hidden sm:flex items-center gap-5 sm:gap-7 shrink-0 tabular-nums">
         <div className="text-right w-20">
           <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p>
           <p className="text-[14px] font-semibold text-black mt-0.5">
             {site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span>
           </p>
         </div>
-        <div className="text-right w-24 hidden sm:block">
+        <div className="text-right w-24">
           <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p>
           <p className="text-[14px] font-semibold text-black mt-0.5">
             {site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span>
           </p>
         </div>
-        <div className="text-right w-14 hidden md:block">
+        <div className="text-right w-14">
           <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p>
           <p className="text-[14px] font-semibold mt-0.5">
             {hasInverters ? (
