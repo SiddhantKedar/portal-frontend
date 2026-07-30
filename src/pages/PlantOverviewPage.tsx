@@ -87,6 +87,11 @@ interface PlantOverview {
     last_updated: string
   } | null
   breaker_status: string | null
+  generation_window: {
+    status: 'operational' | 'stopped' | 'no_data'
+    start_time: string | null
+    end_time: string | null
+  }
 }
 
 interface PowerTrendPoint {
@@ -172,6 +177,14 @@ function todayString() {
 function formatDateTick(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function ChartEmpty({ height, label = 'No data for this day' }: { height: string; label?: string }) {
+  return (
+    <div className={`${height} flex flex-col items-center justify-center gap-2`}>
+      <p className="text-[13px] text-black/45">{label}</p>
+    </div>
+  )
 }
 
 // ============================================================
@@ -461,6 +474,49 @@ function PerformanceCards({
   )
 }
 
+// Generation window chip. Keys off status AND timestamp presence — status
+// alone is ambiguous: 'operational' with no start_time means "not generating
+// yet" (pre-dawn/washout, NOT live), and 'no_data' with timestamps means the
+// meter dropped comms mid-day (NOT a clean 'stopped'). Red is never used —
+// a dark meter at night is expected, not critical.
+function GenerationChip({ gen }: { gen: PlantOverview['generation_window'] | null | undefined }) {
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit',
+    })
+
+  let value: string
+  let dot = 'bg-black/30'
+  let valueTone = 'text-black/55'
+  let iconTone = 'text-black/40'
+
+  if (gen == null) {
+    value = '—'
+  } else if (gen.status === 'operational' && gen.start_time) {
+    value = `Since ${fmt(gen.start_time)}`
+    dot = 'bg-green-500'; valueTone = 'text-green-700'; iconTone = 'text-[#e17100]'
+  } else if (gen.status === 'operational') {
+    value = 'Not generating yet'
+  } else if (gen.status === 'stopped' && gen.start_time && gen.end_time) {
+    value = `${fmt(gen.start_time)} – ${fmt(gen.end_time)}`
+    dot = 'bg-black'; valueTone = 'text-black'; iconTone = 'text-[#e17100]'
+  } else if (gen.status === 'no_data' && gen.end_time) {
+    value = `Last export ${fmt(gen.end_time)}`
+    dot = 'bg-[#e17100]'; valueTone = 'text-[#9a6a2a]'; iconTone = 'text-[#9a6a2a]'
+  } else {
+    value = 'No data'
+  }
+
+  return (
+    <div className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 rounded-full border border-black/15 bg-white shrink-0">
+      <Sun size={13} className={`${iconTone} shrink-0`} strokeWidth={2} />
+      <span className="text-[11px] uppercase tracking-[0.1em] text-black font-semibold">Generation</span>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />
+      <span className={`text-[13px] font-semibold ${valueTone} tabular-nums whitespace-nowrap`}>{value}</span>
+    </div>
+  )
+}
+
 // ============================================================
 // Animated Sun — the playful centerpiece, ported from WeatherPage.
 // Rays grow, brighten, and rotate based on irradiance.
@@ -704,7 +760,19 @@ const POWER_GROUPS = [
 // Inverter 
 type InverterRow = PlantOverview['inverters'][number]
 
-const INV_COLS = 'grid grid-cols-[1fr_84px] sm:grid-cols-[1fr_1fr_120px]'
+// Status → dot + label. Extend as new states land (running, fault, standby,
+// derating…). Green stays reserved for healthy/producing states, red for
+// offline/fault, muted for idle. Unknown values fall through to a neutral row.
+const INV_STATUS: Record<string, { label: string; dot: string; text: string }> = {
+  online:  { label: 'Online',  dot: 'bg-[#22C55E]', text: 'text-green-700' },
+  running: { label: 'Running', dot: 'bg-[#22C55E]', text: 'text-green-700' },
+  standby: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55' },
+  fault:   { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600' },
+  offline: { label: 'Offline', dot: 'bg-red-600',   text: 'text-red-600' },
+}
+
+// Name | Status | Power  — add a 4th track here when daily-gen lands
+const INV_COLS = 'grid grid-cols-[minmax(0,1fr)_84px_88px] sm:grid-cols-[minmax(0,1.6fr)_140px_120px]'
 
 function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   if (!inverters.length) {
@@ -714,44 +782,60 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   const rows = [...inverters].sort((a, b) =>
     a.device_id.localeCompare(b.device_id, undefined, { numeric: true })
   )
-  const peak = Math.max(...rows.map((r) => r.active_power_kw ?? 0), 0)
+  const total = rows.reduce((s, r) => s + (r.status === 'offline' ? 0 : (r.active_power_kw ?? 0)), 0)
+
   return (
     <div>
       <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
         <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Inverter</span>
-        <span className="hidden sm:block text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Output</span>
+        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Status</span>
         <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Power</span>
+        {/* <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Daily gen</span> */}
       </div>
 
       {rows.map((inv) => {
-        const online = inv.status === 'online'
+        const st = INV_STATUS[inv.status] ?? {
+          label: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
+          dot: 'bg-black/30',
+          text: 'text-black/55',
+        }
+        const isOffline = inv.status === 'offline'
         const kw = inv.active_power_kw ?? 0
-        const pct = peak > 0 ? (kw / peak) * 100 : 0
         return (
           <div key={inv.device_id} className={`${INV_COLS} items-center py-3.5 border-b border-black/[0.06] last:border-0`}>
-            <span className="flex items-center gap-2 min-w-0 pr-3">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? 'bg-[#22C55E]' : 'bg-red-600'}`} />
-              <span className="text-[13px] font-semibold text-black truncate">{inv.name}</span>
+            <span className={`text-[13px] font-semibold truncate pr-3 ${isOffline ? 'text-black/45' : 'text-black'}`}>
+              {inv.name}
             </span>
 
-            <span className="hidden sm:flex items-center pr-6">
-              <span className="h-1.5 w-full bg-black/[0.06] rounded-full overflow-hidden">
-                <span
-                  className="block h-full rounded-full"
-                  style={{ width: `${pct}%`, background: online ? '#497d00' : 'rgba(0,0,0,0.2)' }}
-                />
-              </span>
+            <span className="flex items-center gap-2 min-w-0">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
+              <span className={`text-[12px] font-semibold truncate ${st.text}`}>{st.label}</span>
             </span>
 
             <span className="flex items-baseline justify-end gap-1">
-              <span className={`${T.metricM} ${online ? '' : 'text-black/40'}`}>{kw.toFixed(1)}</span>
-              <span className="text-[10px] text-black/50">kW</span>
+              {isOffline ? (
+                <span className="text-[13px] font-semibold text-black/30">—</span>
+              ) : (
+                <>
+                  <span className={T.metricM}>{kw.toFixed(1)}</span>
+                  <span className="text-[10px] text-black/50">kW</span>
+                </>
+              )}
             </span>
+
+            {/* daily-gen cell goes here — <span className="flex items-baseline justify-end gap-1">…</span> */}
           </div>
         )
       })}
 
-      
+      <div className={`${INV_COLS} items-baseline pt-2.5`}>
+        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Total output</span>
+        <span />
+        <span className="flex items-baseline justify-end gap-1">
+          <span className="text-[15px] font-semibold text-black tabular-nums">{total.toFixed(1)}</span>
+          <span className="text-[10px] text-black/50">kW</span>
+        </span>
+      </div>
     </div>
   )
 }
@@ -815,6 +899,8 @@ function PowerTrendCard({
         <div className={`${height} flex items-center justify-center`}>
           <p className={T.meta}>Loading chart…</p>
         </div>
+      ) : chartData.length === 0 ? (
+        <ChartEmpty height={height} />
       ) : (
         <div className={`${height} w-full`}>
           <ResponsiveContainer width="100%" height="100%">
@@ -1005,6 +1091,8 @@ function ElectricalTrendCard({
         <div className={`${height} flex items-center justify-center`}>
           <p className={T.meta}>Loading chart…</p>
         </div>
+      ) : chartData.length === 0 ? (
+        <ChartEmpty height={height} />
       ) : (
         <div className={`${height} w-full`}>
           <ResponsiveContainer width="100%" height="100%">
@@ -1502,6 +1590,7 @@ const fetchElecTrend = useCallback(async () => {
                   healthy={overview ? overview.device_summary.online === overview.device_summary.total : null}
                   icon={Cpu}
                 />
+                <GenerationChip gen={overview?.generation_window} />
               </div>
             </div>
           </div>
