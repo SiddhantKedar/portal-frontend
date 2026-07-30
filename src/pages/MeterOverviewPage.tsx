@@ -183,9 +183,6 @@ function MeterSnapshotCard({ meter }: { meter: Meter }) {
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0">
             <p className="text-[16px] font-semibold text-black truncate">{meter.name}</p>
-            <p className={`${T.eyebrow} mt-0.5`}>
-              {meter.site_type === 'GENERATION' ? 'Generation' : 'Substation'}
-            </p>
           </div>
           <StatusChip status={meter.status} />
         </div>
@@ -227,8 +224,8 @@ function MeterSnapshotCard({ meter }: { meter: Meter }) {
             <div className="min-w-0">
               <p className={T.eyebrow}>Total Export</p>
               <p className={`${T.metricM} text-[#497d00] mt-0.5`}>
-                {meter.energy_active_export_kwh.toLocaleString()}
-                <span className={`${T.unit} ml-1`}>kWh</span>
+                {(meter.energy_active_export_kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                <span className={`${T.unit} ml-1`}>MWh</span>
               </p>
             </div>
           </div>

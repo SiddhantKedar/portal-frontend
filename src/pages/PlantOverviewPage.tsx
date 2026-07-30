@@ -82,6 +82,10 @@ interface PlantOverview {
     dc_power_total_kw: number
     co2_avoided_today_kg: number
   } | null
+  meter: {
+    status: string
+    last_updated: string
+  } | null
   breaker_status: string | null
 }
 
@@ -499,15 +503,15 @@ function AnimatedSun({ irradiance, isOffline = false }: { irradiance: number; is
 
   if (isNight) {
     const stars = [
-      { cx: 24, cy: 34, r: 1.8, delay: '0s' },
-      { cx: 136, cy: 28, r: 1.4, delay: '0.7s' },
-      { cx: 18, cy: 112, r: 1.5, delay: '1.4s' },
-      { cx: 142, cy: 104, r: 1.9, delay: '0.4s' },
-      { cx: 50, cy: 146, r: 1.3, delay: '1.8s' },
-      { cx: 116, cy: 140, r: 1.4, delay: '1.1s' },
-      { cx: 82, cy: 18, r: 1.2, delay: '2.1s' },
-      { cx: 8, cy: 72, r: 1.1, delay: '0.9s' },
-      { cx: 150, cy: 66, r: 1.2, delay: '1.6s' },
+      { cx: 24, cy: 34, r: 2.4, delay: '0s' },
+      { cx: 136, cy: 28, r: 1.9, delay: '0.7s' },
+      { cx: 18, cy: 112, r: 2.1, delay: '1.4s' },
+      { cx: 142, cy: 104, r: 2.5, delay: '0.4s' },
+      { cx: 50, cy: 146, r: 1.9, delay: '1.8s' },
+      { cx: 116, cy: 140, r: 2.0, delay: '1.1s' },
+      { cx: 82, cy: 18, r: 1.6, delay: '2.1s' },
+      { cx: 8, cy: 72, r: 1.3, delay: '0.9s' },
+      { cx: 150, cy: 66, r: 1.7, delay: '1.6s' },
     ]
     return (
       <div className="relative w-[160px] h-[160px] flex items-center justify-center">
@@ -889,30 +893,33 @@ function PowerTrendCard({
           </ResponsiveContainer>
         </div>
       )}
-      {stats && (
+   {stats && (
         <div className="mt-4 pt-3 border-t border-black/15">
-          <div className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] pb-1.5">
+          <div className="grid grid-cols-[1fr_76px_76px] sm:grid-cols-[1fr_140px_140px] pb-1.5">
             <span />
-            {['Now', 'Peak', 'Avg'].map((h) => (
+            {['Now', 'Peak'].map((h) => (
               <span key={h} className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">{h}</span>
             ))}
           </div>
           {[
-            { key: 'power',       name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw },
-            { key: 'irradiation', name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2 },
+            { key: 'power',       name: 'Active Power', unit: 'kW',   color: '#e17100', s: stats.active_power_total_kw, clampZero: false },
+            { key: 'irradiation', name: 'Irradiation',  unit: 'W/m²', color: '#497d00', s: stats.irradiation_inclined_wm2, clampZero: true },
           ].filter((g) => !hidden.has(g.key)).map((g) => (
-            <div key={g.name} className="grid grid-cols-[1fr_76px_76px_76px] sm:grid-cols-[1fr_140px_140px_140px] items-baseline py-1">
+            <div key={g.name} className="grid grid-cols-[1fr_76px_76px] sm:grid-cols-[1fr_140px_140px] items-baseline py-1">
               <span className="flex items-baseline gap-2 min-w-0">
                 <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: g.color }} />
                 <span className="text-[13px] font-semibold text-black truncate">{g.name}</span>
                 <span className="text-[10px] text-black/40 shrink-0">{g.unit}</span>
               </span>
-              {(['last', 'max', 'mean'] as const).map((k) => (
-                <span key={k} className={`text-[13px] font-semibold tabular-nums text-right ${k === 'last' ? '' : 'text-black/55'}`}
-                      style={k === 'last' ? { color: g.color } : undefined}>
-                  {Number(g.s[k]).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                </span>
-              ))}
+              {(['last', 'max'] as const).map((k) => {
+                const val = g.clampZero ? Math.max(0, Number(g.s[k])) : Number(g.s[k])
+                return (
+                  <span key={k} className={`text-[13px] font-semibold tabular-nums text-right ${k === 'last' ? '' : 'text-black/55'}`}
+                        style={k === 'last' ? { color: g.color } : undefined}>
+                    {val.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </span>
+                )
+              })}
             </div>
           ))}
         </div>
@@ -1506,7 +1513,7 @@ const fetchElecTrend = useCallback(async () => {
       <Divider />
       <section className="pt-10 pb-3">
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-10 md:gap-16 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-10 md:gap-12 items-center">
 
             {/* Gauge column — now sits on a soft tinted backdrop with capacity context above/below */}
             <div className="flex flex-col items-center">
@@ -1784,62 +1791,69 @@ const fetchElecTrend = useCallback(async () => {
       <Section>
         <SectionHeader
           title="Grid"
-          meta={overview?.last_updated ? `Last Updated : ${formatLastUpdated(overview.last_updated)}` : 'No data'}
           accent="olive"
+          meta={overview?.meter?.last_updated ? `Last Updated : ${formatLastUpdated(overview.meter.last_updated)}` : 'No data'}
+          status={overview?.meter ? { label: overview.meter.status === 'online' ? 'Online' : 'Offline', online: overview.meter.status === 'online' } : undefined}
         />
-{/* System scalars — borderless strip, single line on mobile */}
-        <div className="flex items-end justify-between sm:justify-start gap-x-3 sm:gap-x-10 pb-5 border-b border-black/10">
-          {[
-            { label: 'Frequency', value: overview?.plant.frequency_hz?.toFixed(2) ?? '—', unit: 'Hz' },
-            { label: 'Power Factor', value: overview?.plant.power_factor?.toFixed(2) ?? '—', unit: '' },
-            { label: 'Reactive Power', value: overview?.plant.reactive_power_kvar?.toFixed(1) ?? '—', unit: 'kVAR' },
-          ].map((m) => (
-            <div key={m.label} className="min-w-0">
-              <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.12em] font-semibold text-black/50 mb-1.5 whitespace-nowrap">
-                {m.label}
-              </p>
-              <p className="flex items-baseline gap-1 whitespace-nowrap">
-                <span className="text-[18px] sm:text-[22px] font-semibold text-black tracking-tight tabular-nums leading-none">
-                  {m.value}
-                </span>
-                {m.unit && <span className="text-[10px] sm:text-[11px] text-black/50 font-medium">{m.unit}</span>}
-              </p>
-            </div>
-          ))}
-        </div>
 
-        {/* Phase ledger */}
-        <div className="mt-5">
-          <div className="grid grid-cols-[1fr_1fr_1fr] pb-2 border-b border-black/15">
-            <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Phase</span>
-            <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Voltage</span>
-            <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Current</span>
+        {/* Two-column: tinted scalar rail (left) | phase ledger (right). Centered cluster on laptop, stacks on mobile. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[210px_1fr] gap-8 lg:gap-7">
+
+          {/* System scalars — soft rail with hairlines on laptop; single-line strip on mobile */}
+          <div className="flex flex-row lg:flex-col justify-between lg:justify-start gap-x-3 lg:bg-black/[0.025] lg:rounded-[10px] lg:px-[18px] lg:divide-y lg:divide-black/[0.08]">
+            {[
+              { label: 'Frequency', value: overview?.plant.frequency_hz?.toFixed(2) ?? '—', unit: 'Hz' },
+              { label: 'Power Factor', value: overview?.plant.power_factor?.toFixed(2) ?? '—', unit: '' },
+              { label: 'Reactive Power', value: overview?.plant.reactive_power_kvar?.toFixed(1) ?? '—', unit: 'kVAR' },
+            ].map((m) => (
+              <div key={m.label} className="min-w-0 lg:py-2.5">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.12em] font-semibold text-black/50 mb-1.5 whitespace-nowrap">
+                  {m.label}
+                </p>
+                <p className="flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[18px] sm:text-[22px] font-semibold text-black tracking-tight tabular-nums leading-none">
+                    {m.value}
+                  </span>
+                  {m.unit && <span className="text-[10px] sm:text-[11px] text-black/50 font-medium">{m.unit}</span>}
+                </p>
+              </div>
+            ))}
           </div>
-          {[
-            { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
-            { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
-            { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
-          ].map((row) => (
-            <div key={row.phase} className="grid grid-cols-[1fr_1fr_1fr] items-baseline py-3.5 border-b border-black/[0.06] last:border-0">
-              <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#497d00] shrink-0" />
-                <span className="text-[13px] font-semibold text-black">Phase {row.phase}</span>
-              </span>
-              <span className="flex items-baseline justify-end gap-1">
-                <span className={T.metricM}>{row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}</span>
-                <span className="text-[10px] text-black/50">kV</span>
-              </span>
-              <span className="flex items-baseline justify-end gap-1">
-                <span className={`${T.metricM} text-[#497d00]`}>{row.current?.toFixed(2) ?? '—'}</span>
-                <span className="text-[10px] text-black/50">A</span>
-              </span>
+
+          {/* Phase ledger — [auto_1fr_1fr] so Voltage & Current share the width evenly */}
+          <div className="lg:border-l lg:border-black/10 lg:pl-8">
+            <div className="grid grid-cols-[auto_1fr_1fr] pb-2 border-b border-black/15">
+              <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Phase</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Voltage</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Current</span>
             </div>
-          ))}
+            {[
+              { phase: 'AB / A', voltage: overview?.grid.voltage_ab, current: overview?.grid.current_a },
+              { phase: 'BC / B', voltage: overview?.grid.voltage_bc, current: overview?.grid.current_b },
+              { phase: 'CA / C', voltage: overview?.grid.voltage_ca, current: overview?.grid.current_c },
+            ].map((row) => (
+              <div key={row.phase} className="grid grid-cols-[auto_1fr_1fr] items-baseline py-3.5 border-b border-black/[0.06] last:border-0">
+                <span className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${overview?.meter?.status === 'online' ? 'bg-[#497d00]' : 'bg-red-600'}`} />
+                  <span className="text-[13px] font-semibold text-black whitespace-nowrap">Phase {row.phase}</span>
+                </span>
+                <span className="flex items-baseline justify-end gap-1">
+                  <span className={T.metricM}>{row.voltage != null ? (row.voltage / 1000).toFixed(2) : '—'}</span>
+                  <span className="text-[10px] text-black/50">kV</span>
+                </span>
+                <span className="flex items-baseline justify-end gap-1">
+                  <span className={`${T.metricM} text-[#497d00]`}>{row.current?.toFixed(2) ?? '—'}</span>
+                  <span className="text-[10px] text-black/50">A</span>
+                </span>
+              </div>
+            ))}
+          </div>
+
         </div>
       </Section>
 
       {/* ============ DAILY ENERGY ============ */}
-      <Divider />
+      {/* <Divider /> */}
       <Section>
         {SHOW_DAILY_ENERGY_CARD && (
           <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
