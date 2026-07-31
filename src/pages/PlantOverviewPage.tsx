@@ -1376,9 +1376,9 @@ export default function PlantOverviewPage() {
     }
   }, [site?.id])
 
-  const fetchPowerTrend = useCallback(async () => {
+  const fetchPowerTrend = useCallback(async (silent = false) => {
     if (!site?.id) return
-    setTrendLoading(true)
+    if (!silent) setTrendLoading(true)
     try {
       const url = `/influx/plant/power-trend/?site=${site.id}&date=${selectedDate}`
       const res = await api.get<PowerTrendData>(url)
@@ -1387,7 +1387,7 @@ export default function PlantOverviewPage() {
     } catch {
       setTrend([])
     } finally {
-      setTrendLoading(false)
+      if (!silent) setTrendLoading(false)
     }
   }, [site?.id, selectedDate])
 
@@ -1406,22 +1406,22 @@ export default function PlantOverviewPage() {
     }
   }, [site?.id])
 
-const fetchElecTrend = useCallback(async () => {
-  if (!site?.id) return
-  setElecTrendLoading(true)
-  try {
-    const res = await api.get<ElecTrendData>(
-      `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
-    )
-    setElecTrend(res.data.data)
-    setElecStats(res.data.stats ?? null)
-  } catch {
-    setElecTrend([])
-    setElecStats(null)
-  } finally {
-    setElecTrendLoading(false)
-  }
-}, [site?.id, elecSelectedDate])
+  const fetchElecTrend = useCallback(async (silent = false) => {
+      if (!site?.id) return
+      if (!silent) setElecTrendLoading(true)
+      try {
+        const res = await api.get<ElecTrendData>(
+          `/influx/plant/electrical-trend/?site=${site.id}&date=${elecSelectedDate}&interval=5`
+        )
+        setElecTrend(res.data.data)
+        setElecStats(res.data.stats ?? null)
+      } catch {
+        setElecTrend([])
+        setElecStats(null)
+      } finally {
+        if (!silent) setElecTrendLoading(false)
+      }
+    }, [site?.id, elecSelectedDate])
 
   // Initial + dep-change fetches. Each effect fires when its fetcher's identity changes,
   // which happens when site.id or the relevant selected date changes.
@@ -1430,26 +1430,46 @@ const fetchElecTrend = useCallback(async () => {
   useEffect(() => { fetchDailyEnergy() }, [fetchDailyEnergy])
   useEffect(() => { fetchElecTrend() }, [fetchElecTrend])
 
+  // Live trends poll on their own 5-min cadence (data is 5-min aggregated).
+  // Silent, and only while viewing *today* — past days are immutable.
+  useEffect(() => {
+    if (selectedDate !== todayString()) return
+    const id = setInterval(() => fetchPowerTrend(true), 5 * 60_000)
+    return () => clearInterval(id)
+  }, [selectedDate, fetchPowerTrend])
+
+  useEffect(() => {
+    if (elecSelectedDate !== todayString()) return
+    const id = setInterval(() => fetchElecTrend(true), 5 * 60_000)
+    return () => clearInterval(id)
+  }, [elecSelectedDate, fetchElecTrend])
+
   // Full refresh — used for wake events and the manual Refresh button.
   const fetchAll = useCallback(async () => {
     await Promise.all([
       fetchOverview(),
-      ...(SHOW_DAILY_ENERGY_CARD ? [fetchDailyEnergy()] : []),
-      fetchDailyEnergy(),
+      fetchPowerTrend(),
       fetchElecTrend(),
+      ...(SHOW_DAILY_ENERGY_CARD ? [fetchDailyEnergy()] : []),
     ])
-  }, [fetchOverview, fetchPowerTrend, fetchDailyEnergy, fetchElecTrend])
-
+  }, [fetchOverview, fetchPowerTrend, fetchElecTrend, fetchDailyEnergy])
   // Auto-refresh strategy:
   //   Interval (60s): only /overview/ — the lightweight snapshot.
   //   Wake events (visibility, focus, pageshow, online): full refresh via fetchAll.
   //   Manual refresh button: full refresh via fetchAll (bypasses throttle).
   // Heavy queries (power/daily/elec) never run on the interval, so they don't
   // burn API calls while someone is looking at yesterday's graph.
-  const { refetch, isRefetching } = useAutoRefresh(fetchOverview, {
+  useAutoRefresh(fetchOverview, {
     intervalMs: 60_000,
     onWake: fetchAll,
   })
+
+  const [refreshing, setRefreshing] = useState(false)
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try { await fetchAll() } finally { setRefreshing(false) }
+  }, [refreshing, fetchAll])
 
   const chartData = useMemo(() => {
     const pts = trend
@@ -1557,11 +1577,11 @@ const fetchElecTrend = useCallback(async () => {
             </p>
           <button
             type="button"
-            onClick={refetch}
-            disabled={isRefetching}
+            onClick={handleRefresh}
+            disabled={refreshing}
             className="h-10 px-4 flex items-center gap-2 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold order-1 sm:order-1"
           >
-            <RefreshCw size={14} strokeWidth={2} />
+            <RefreshCw size={14} strokeWidth={2} className={refreshing ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
