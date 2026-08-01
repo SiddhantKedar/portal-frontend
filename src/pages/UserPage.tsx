@@ -1,4 +1,4 @@
-import { User as UserIcon, Mail, Shield, Building2, Users } from 'lucide-react'
+import { User as UserIcon, Mail, Shield, Building2, Users, Factory } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 // Same text-size tokens used across PlantOverviewPage — kept local here since
@@ -12,6 +12,7 @@ function roleLabel(role?: string) {
   if (role === 'ADMIN') return 'Admin'
   if (role === 'INSTALLER') return 'Installer'
   if (role === 'CUSTOMER') return 'Customer'
+  if (role === 'SITE_USER') return 'Site User'
   return role ?? '—'
 }
 
@@ -41,7 +42,8 @@ export default function UserPage() {
   if (!user) return null
 
   const showInstaller = user.role === 'INSTALLER' || user.role === 'CUSTOMER'
-  const showCustomer = user.role === 'CUSTOMER'
+  const showCustomer = user.role === 'CUSTOMER' || user.role === 'SITE_USER'
+  const showSite = user.role === 'SITE_USER'
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -82,6 +84,14 @@ export default function UserPage() {
               icon={<Users size={16} className="text-black/60" />}
               label="Customer"
               value={user.customer_name ?? '—'}
+            />
+          )}
+
+          {showSite && (
+            <InfoRow
+              icon={<Factory size={16} className="text-black/60" />}
+              label="Site"
+              value={user.site_name ?? '—'}
             />
           )}
         </div>

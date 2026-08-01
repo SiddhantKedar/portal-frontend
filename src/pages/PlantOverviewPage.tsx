@@ -1353,7 +1353,7 @@ export default function PlantOverviewPage() {
 }
 
   // Near the top of the file, with your other constants
-  const SHOW_DAILY_ENERGY_CARD = false // temporarily disabled — bar width/centering needs another pass
+  const SHOW_DAILY_ENERGY_CARD = true // temporarily disabled — bar width/centering needs another pass
   // ============================================================
   // Fetch functions — extracted into memoized callbacks so they can be
   // called both by their own effect (on dep change) and by fetchAll

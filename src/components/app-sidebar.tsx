@@ -29,6 +29,13 @@ const NAV_INACTIVE =
 const SUB_ACTIVE = 'text-[12px] font-medium'
 const SUB_INACTIVE = 'text-[12px]'
 
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Admin',
+  INSTALLER: 'Installer',
+  CUSTOMER: 'Customer',
+  SITE_USER: 'Site User',
+}
+
 export function AppSidebar() {
   const { site, devices, selectableSites } = useSite()
   const { user } = useAuth()
@@ -287,7 +294,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-white/10 px-4 py-3">
         <div>
           <p className="text-[12px] font-medium text-white">{user?.full_name}</p>
-          <p className="text-[11px] text-gray-400">{user?.role}</p>
+          <p className="text-[11px] text-gray-400">{user ? ROLE_LABELS[user.role] ?? user.role : ''}</p>
         </div>
       </SidebarFooter>
 
