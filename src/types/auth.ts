@@ -4,10 +4,12 @@ export interface User {
   first_name: string
   last_name: string
   full_name: string
-  role: 'ADMIN' | 'INSTALLER' | 'CUSTOMER'
+  role: 'ADMIN' | 'INSTALLER' | 'CUSTOMER' | 'SITE_USER'
   installers: { id: number; name: string }[]
   customer_id: number | null
   customer_name: string | null
+  site_id: number | null
+  site_name: string | null
   is_active: boolean
 }
 
