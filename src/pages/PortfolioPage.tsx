@@ -35,6 +35,8 @@ interface SiteSummary {
   installer_name: string | null
   active_power_kw: number
   energy_today_kwh: number | null
+  dc_capacity_kw: number | null
+  ac_capacity_kw: number | null
   meter_online: boolean
   inverters_online: number
   inverters_total: number
@@ -165,11 +167,7 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
 
       <div className="divide-y divide-black/[0.06]">
         {customer.sites.map((site) => (
-          <SiteRow
-            key={site.site_id}
-            site={site}
-            share={totalPower > 0 ? Math.round((site.active_power_kw / totalPower) * 100) : 0}
-          />
+          <SiteRow key={site.site_id} site={site} />
         ))}
       </div>
     </div>
@@ -177,117 +175,47 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
 }
 
 function FlatSiteList({ sites }: { sites: SiteSummary[] }) {
-  const totalPower = sites.reduce((sum, s) => sum + s.active_power_kw, 0)
   return (
     <div className="rounded-2xl border border-black/15 overflow-hidden divide-y divide-black/[0.06]">
       {sites.map((site) => (
-        <SiteRow
-          key={site.site_id}
-          site={site}
-          share={totalPower > 0 ? Math.round((site.active_power_kw / totalPower) * 100) : 0}
-          showInstaller
-        />
+        <SiteRow key={site.site_id} site={site} showInstaller />
       ))}
     </div>
   )
 }
 
 // Site Row
-
-function SiteRow({
-  site,
-  share,
-  showInstaller = false,
-}: {
-  site: SiteSummary
-  share: number
-  showInstaller?: boolean
-}) {
+function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInstaller?: boolean }) {
   const navigate = useNavigate()
   const hasInverters = site.inverters_total > 0
   const invHealthy = hasInverters && site.inverters_online === site.inverters_total
+  const util = site.ac_capacity_kw && site.ac_capacity_kw > 0
+    ? Math.min(Math.round((site.active_power_kw / site.ac_capacity_kw) * 100), 100) : null
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(`/sites/${site.site_id}/plant`)}
-      className="group w-full text-left flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 hover:bg-black/[0.02] transition-colors"
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 min-w-0">
-          <p className="text-[13px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">
-            {site.site_name}
-          </p>
-          {!site.meter_online && (
-            <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] font-semibold text-[#dc2626] border border-[#dc2626]/30 bg-[#dc2626]/[0.06] rounded px-1.5 py-0.5">
-              Offline
-            </span>
-          )}
+    <button type="button" onClick={() => navigate(`/sites/${site.site_id}/plant`)}
+      className="group w-full text-left px-5 py-5 hover:bg-black/[0.02] transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+        <div className="min-w-0 sm:flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-[15px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">{site.site_name}</p>
+            {!site.meter_online && (<span className="shrink-0 text-[10px] uppercase tracking-[0.08em] font-semibold text-[#dc2626] border border-[#dc2626]/30 bg-[#dc2626]/[0.06] rounded px-1.5 py-0.5">Offline</span>)}
+          </div>
+          <p className="mt-1.5 text-[11px] text-black/40 truncate">{showInstaller && site.installer_name ? `${site.installer_name} · ` : ''}{formatLastUpdated(site.last_updated)}</p>
         </div>
-        <div className="flex items-center gap-2 mt-1.5">
-          {share > 0 && (
-            <div className="h-1 w-24 bg-black/[0.06] rounded-full overflow-hidden shrink-0">
-              <div className="h-full rounded-full bg-[#e17100]" style={{ width: `${Math.min(share, 100)}%` }} />
-            </div>
-          )}
-          <span className="text-[11px] text-black/40 tabular-nums truncate">
-            {/* Customers see who maintains the plant — the one bit of context
-                the customer-grouping layout was hiding from them. */}
-            {showInstaller && site.installer_name
-              ? `${site.installer_name} · ${formatLastUpdated(site.last_updated)}`
-              : formatLastUpdated(site.last_updated)}
-          </span>
+        <div className="grid grid-cols-3 gap-x-4 sm:flex sm:items-center sm:justify-end sm:gap-10 tabular-nums shrink-0">
+          <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p><p className="text-[17px] sm:text-[16px] font-semibold text-[#e17100] mt-1">{site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span></p></div>
+          <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p><p className="text-[17px] sm:text-[16px] font-semibold text-black mt-1">{site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span></p></div>
+          <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p><p className="text-[17px] sm:text-[16px] font-semibold mt-1">{hasInverters ? (<><span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span><span className="text-black/40 text-[12px]">/{site.inverters_total}</span></>) : <span className="text-black/30 text-[14px]">—</span>}</p></div>
+          <ChevronRight size={18} className="hidden sm:block text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
         </div>
       </div>
-
-      {/* Mobile stat strip — full-width row, larger type, fills the space
-          that the boxed desktop columns leave empty on small screens */}
-      <div className="flex sm:hidden items-center justify-between w-full pl-[2px]">
-        <span className="text-[13px] font-semibold text-black tabular-nums">
-          {site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span>
-        </span>
-        <span className="text-[13px] font-semibold text-black tabular-nums">
-          {site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span>
-        </span>
-        {hasInverters ? (
-          <span className="flex items-center gap-1.5 text-[13px] font-semibold tabular-nums">
-            <span className={`w-1.5 h-1.5 rounded-full ${invHealthy ? 'bg-[#497d00]' : 'bg-[#e17100]'}`} />
-            <span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span>
-            <span className="text-black/40 text-[11px]">/{site.inverters_total}</span>
-          </span>
-        ) : (
-          <span className="text-[13px] text-black/30">— inv</span>
-        )}
-      </div>
-
-      <div className="hidden sm:flex items-center gap-5 sm:gap-7 shrink-0 tabular-nums">
-        <div className="text-right w-20">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p>
-          <p className="text-[14px] font-semibold text-black mt-0.5">
-            {site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span>
-          </p>
+      {util !== null && (
+        <div className="mt-4 flex items-center gap-3">
+          <div className="h-1.5 flex-1 bg-black/[0.06] rounded-full overflow-hidden"><div className="h-full rounded-full bg-[#e17100]" style={{ width: `${util}%` }} /></div>
+          <span className="text-[11px] text-black/45 tabular-nums shrink-0">{util}% of {site.ac_capacity_kw!.toLocaleString()} kW AC</span>
         </div>
-        <div className="text-right w-24">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p>
-          <p className="text-[14px] font-semibold text-black mt-0.5">
-            {site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span>
-          </p>
-        </div>
-        <div className="text-right w-14">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p>
-          <p className="text-[14px] font-semibold mt-0.5">
-            {hasInverters ? (
-              <>
-                <span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span>
-                <span className="text-black/40 text-[11px]">/{site.inverters_total}</span>
-              </>
-            ) : (
-              <span className="text-black/30">—</span>
-            )}
-          </p>
-        </div>
-        <ChevronRight size={16} className="text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
-      </div>
+      )}
     </button>
   )
 }
