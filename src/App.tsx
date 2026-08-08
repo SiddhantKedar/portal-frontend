@@ -15,6 +15,7 @@ import WeatherPage from './pages/WeatherPage'
 import NotFoundPage from './pages/NotFoundPage'
 import UserPage from './pages/UserPage'
 import EnergyFlowPage from './pages/EnergyFlowPage'
+import ReportsPage from './pages/ReportsPage'
 
 function CenteredMessage({ text, tone = 'muted' }: { text: string; tone?: 'muted' | 'error' }) {
   return (
@@ -101,6 +102,7 @@ export default function App() {
             <Route index element={<Navigate to="plant" replace />} />
             <Route path="plant" element={<PlantOverviewPage />} />
             <Route path="inverters" element={<InverterOverviewPage />} />
+            <Route path="reports" element={<ReportsPage />} />
             <Route element={<DeviceScope />}>
               <Route path="inverters/:deviceId" element={<InverterDetailPage />} />
             </Route>
@@ -109,6 +111,7 @@ export default function App() {
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="weather" element={<WeatherPage />} />
             <Route path="energy-flow" element={<EnergyFlowPage />} />
+
           </Route>
 
           {/* Legacy paths — remove once nothing links to them */}
