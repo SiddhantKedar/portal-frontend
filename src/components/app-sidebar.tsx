@@ -1,4 +1,4 @@
-import { LayoutDashboard, AudioWaveform, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun, ArrowLeft } from 'lucide-react'
+import { LayoutDashboard, AudioWaveform, Factory, AlertTriangle, Gauge, GitMerge, LineChart, Building2, CloudSun, ArrowLeft, FileBarChart2 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import {
   Sidebar,
@@ -240,6 +240,20 @@ export function AppSidebar() {
                     >
                       <CloudSun size={16} />
                       <span className="text-[13px]">Weather</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                {/* Reports */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={`${base}/reports`}
+                      onClick={closeOnMobile}
+                      className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
+                    >
+                      <FileBarChart2 size={16} />
+                      <span className="text-[13px]">Reports</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

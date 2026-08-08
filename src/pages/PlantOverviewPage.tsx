@@ -1895,7 +1895,17 @@ export default function PlantOverviewPage() {
         />
       </Section>
 
-      {/* ============ GRID ============ */}
+
+
+      {/* ============ DAILY ENERGY ============ */}
+      <Divider />
+      <Section>
+        {SHOW_DAILY_ENERGY_CARD && (
+          <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
+        )}
+      </Section>
+
+            {/* ============ GRID ============ */}
       <Divider />
       <Section>
         <SectionHeader
@@ -1959,14 +1969,6 @@ export default function PlantOverviewPage() {
           </div>
 
         </div>
-      </Section>
-
-      {/* ============ DAILY ENERGY ============ */}
-      {/* <Divider /> */}
-      <Section>
-        {SHOW_DAILY_ENERGY_CARD && (
-          <DailyEnergyCard chartData={dailyEnergyChartData} loading={dailyEnergyLoading} />
-        )}
       </Section>
 
       {/* ============ ELECTRICAL TREND ============ */}
