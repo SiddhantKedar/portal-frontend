@@ -219,6 +219,242 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
     </button>
   )
 }
+
+
+
+
+// ============================================================
+// TEMP — Admin inverter-status test section. Throwaway; remove after testing.
+// Consumes /influx/admin/inverter-status/. All TEMP-tagged.
+// ============================================================
+
+// TEMP status code → colour + card tint. 0 Stopped · 1 Running · 2 Standby · 4 Warning · 8 Fault
+const TEMP_STATUS: Record<number, { label: string; dot: string; text: string; seg: string; card: string }> = {
+  0: { label: 'Stopped', dot: 'bg-black/40',  text: 'text-black/60',  seg: '#9ca3af', card: 'bg-black/[0.03] border-black/10' },
+  1: { label: 'Running', dot: 'bg-green-500', text: 'text-green-700', seg: '#22c55e', card: 'bg-green-500/[0.07] border-green-600/20' },
+  2: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55',  seg: '#cbd5e1', card: 'bg-black/[0.03] border-black/10' },
+  4: { label: 'Warning', dot: 'bg-[#e17100]', text: 'text-[#e17100]', seg: '#e17100', card: 'bg-[#e17100]/[0.08] border-[#e17100]/25' },
+  8: { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600',   seg: '#dc2626', card: 'bg-red-600/[0.06] border-red-600/25' },
+}
+const tempStatusMeta = (code: number) =>
+  TEMP_STATUS[code] ?? { label: `Code ${code}`, dot: 'bg-black/30', text: 'text-black/50', seg: '#94a3b8', card: 'bg-black/[0.03] border-black/10' }
+
+// TEMP types — mirror the admin payload
+interface TempStatePoint { code: number; label: string; start: string; end: string | null }
+interface TempInverter {
+  device_id: string
+  name: string
+  current: { code: number; label: string; since: string }
+  history: TempStatePoint[]
+}
+interface TempSite {
+  site_id: number
+  site_name: string
+  influx_site_id: string
+  customer: string
+  inverters: TempInverter[]
+}
+interface TempStatusData { history_window_hours: number; sites: TempSite[] }
+
+// TEMP — IST clock
+function tempTime(iso: string | null) {
+  if (!iso) return 'now'
+  return new Date(iso).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' })
+}
+
+// TEMP — inverters ascending by device_id (numeric-aware)
+const tempSorted = (invs: TempInverter[]) =>
+  [...invs].sort((a, b) => a.device_id.localeCompare(b.device_id, undefined, { numeric: true }))
+
+// TEMP — small labelled sub-header with a coloured bar
+function TempSubHead({ label, color, caption }: { label: string; color: string; caption: string }) {
+  return (
+    <div className="mb-3">
+      <div className="flex items-center gap-2">
+        <span className="w-1 h-4 rounded-full" style={{ background: color }} />
+        <h3 className="text-[15px] font-semibold text-black">{label}</h3>
+      </div>
+      <p className="text-[12px] text-black/50 mt-1">{caption}</p>
+    </div>
+  )
+}
+
+// TEMP — LIVE: compact current-status card for one inverter
+function TempLiveCard({ inv }: { inv: TempInverter }) {
+  const m = tempStatusMeta(inv.current.code)
+  return (
+    <div className={`rounded-lg border px-2.5 py-2 ${m.card}`}>
+      <p className="text-[12px] font-semibold text-black truncate leading-tight">{inv.name}</p>
+      <div className="flex items-center gap-1.5 mt-1">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.dot}`} />
+        <span className={`text-[11px] font-semibold truncate ${m.text}`}>{inv.current.label}</span>
+      </div>
+      <p className="text-[10px] text-black/45 mt-0.5">since {tempTime(inv.current.since)}</p>
+    </div>
+  )
+}
+
+// TEMP — proportional status timeline for one inverter over the window
+function TempTimeline({ history }: { history: TempStatePoint[] }) {
+  const segs = [...history].reverse()   // oldest → newest, left → right
+  if (!segs.length) return <div className="h-3 rounded bg-black/[0.06]" />
+
+  const now = Date.now()
+  const t0 = new Date(segs[0].start).getTime()
+  const t1 = Math.max(now, ...segs.map((s) => new Date(s.end ?? now).getTime()))
+  const span = Math.max(1, t1 - t0)
+
+  return (
+    <div className="flex h-3 rounded overflow-hidden bg-black/[0.06]">
+      {segs.map((s, i) => {
+        const a = new Date(s.start).getTime()
+        const b = new Date(s.end ?? now).getTime()
+        const m = tempStatusMeta(s.code)
+        return (
+          <div
+            key={i}
+            title={`${s.label} · ${tempTime(s.start)}–${tempTime(s.end)}`}
+            style={{
+              width: `${((b - a) / span) * 100}%`,
+              minWidth: s.code === 8 || s.code === 4 ? 3 : 1,   // keep faults/warnings visible
+              background: m.seg,
+            }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+// TEMP — HISTORY: one inverter's timeline + plain-language fault/warning callouts
+function TempHistoryRow({ inv }: { inv: TempInverter }) {
+  const events = inv.history.filter((h) => h.code === 8 || h.code === 4)
+  return (
+    <div className="py-3 border-b border-black/[0.06] last:border-0">
+      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center sm:gap-4">
+        <p className="text-[13px] font-semibold text-black truncate">{inv.name}</p>
+        <TempTimeline history={inv.history} />
+      </div>
+      {events.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2 sm:pl-[166px]">
+          {events.map((e, i) => {
+            const m = tempStatusMeta(e.code)
+            return (
+              <span key={i} className={`text-[11px] font-medium rounded-md border px-2 py-0.5 ${m.card}`}>
+                <span className={m.text}>{e.label}</span>
+                <span className="text-black/45"> · {tempTime(e.start)}–{tempTime(e.end)}</span>
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// TEMP — the whole admin-only section. Self-contained fetch. Remove after testing.
+function TempFaultsSection() {
+  const [data, setData] = useState<TempStatusData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await api.get<TempStatusData>('/influx/admin/inverter-status/')
+      setData(res.data); setErr(null)
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail ?? 'Failed to load inverter status.')
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchStatus() }, [fetchStatus])
+  useAutoRefresh(fetchStatus, { intervalMs: 60_000 })   // TEMP: live-ish while testing
+
+  const windowH = data?.history_window_hours ?? 12
+  const flagged = data?.sites.reduce(
+    (n, s) => n + s.inverters.reduce((m, inv) => m + inv.history.filter((h) => h.code === 8 || h.code === 4).length, 0),
+    0,
+  ) ?? 0
+
+  return (
+    <>
+      <Divider />
+      <section className="pt-8 space-y-8">
+        {/* TEMP section — remove after inverter-status testing */}
+        <SectionHeader
+          title="Temporary Faults"
+          meta={loading
+            ? 'Loading…'
+            : `Inverter status · last ${windowH}h · ${flagged} fault/warning event${flagged !== 1 ? 's' : ''} — TEMP TEST`}
+          accent="none"
+        />
+
+        {err && <p className="text-[13px] text-red-600">{err}</p>}
+
+        {!loading && !err && data && (
+          <>
+            {/* ---- LIVE (top) ---- */}
+            <div>
+              <TempSubHead label="Live Status" color="#497d00" caption="Current status of every inverter, grouped by site." />
+              <div className="space-y-5">
+                {data.sites.map((site) => (
+                  <div key={site.site_id}>
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <h4 className="text-[13px] font-semibold text-black">{site.site_name}</h4>
+                      <span className="text-[12px] text-black/45 truncate">{site.customer}</span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {tempSorted(site.inverters).map((inv) => <TempLiveCard key={inv.device_id} inv={inv} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ---- HISTORY (below) ---- */}
+            <div>
+              <TempSubHead
+                label="Recent Changes"
+                color="#e17100"
+                caption={`Each bar is the last ${windowH} hours — left is older, right is now. Hover a segment for details.`}
+              />
+
+              {/* TEMP legend */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-4">
+                {([1, 0, 2, 4, 8] as number[]).map((code) => {
+                  const m = tempStatusMeta(code)
+                  return (
+                    <span key={code} className="inline-flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-sm" style={{ background: m.seg }} />
+                      <span className="text-[11px] text-black/55 font-medium">{m.label}</span>
+                    </span>
+                  )
+                })}
+              </div>
+
+              <div className="space-y-5">
+                {data.sites.map((site) => (
+                  <div key={site.site_id}>
+                    <h4 className="text-[13px] font-semibold text-black mb-1">{site.site_name}</h4>
+                    {tempSorted(site.inverters).map((inv) => <TempHistoryRow key={inv.device_id} inv={inv} />)}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {data.sites.length === 0 && <p className="text-[13px] text-black/50">No inverter status data.</p>}
+          </>
+        )}
+      </section>
+    </>
+  )
+}
+
+
+
+
+
+
 // ============================================================
 // Main Page
 // ============================================================
@@ -410,6 +646,9 @@ export default function PortfolioPage() {
           </div>
         )}
       </section>
+
+      {/* ============ TEMP — ADMIN INVERTER STATUS TEST (remove after testing) ============ */}
+        {user?.role === 'ADMIN' && <TempFaultsSection />}
     </div>
   )
 }
