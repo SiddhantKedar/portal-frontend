@@ -61,6 +61,7 @@ interface PlantOverview {
     name: string
     active_power_kw: number
     daily_gen_kwh: number
+    total_gen_kwh: number 
     status: string
     last_updated: string
   }[]
@@ -771,8 +772,9 @@ const INV_STATUS: Record<string, { label: string; dot: string; text: string }> =
   offline: { label: 'Offline', dot: 'bg-red-600',   text: 'text-red-600' },
 }
 
-// Name | Status | Power  — add a 4th track here when daily-gen lands
-const INV_COLS = 'grid grid-cols-[minmax(0,1fr)_84px_88px] sm:grid-cols-[minmax(0,1.6fr)_140px_120px]'
+// Name | Status | Power | Today | Total
+const INV_COLS =
+  'grid grid-cols-[minmax(0,1fr)_44px_62px_58px_64px] sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]'
 
 function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   if (!inverters.length) {
@@ -782,15 +784,24 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   const rows = [...inverters].sort((a, b) =>
     a.device_id.localeCompare(b.device_id, undefined, { numeric: true })
   )
-  const total = rows.reduce((s, r) => s + (r.status === 'offline' ? 0 : (r.active_power_kw ?? 0)), 0)
+
+  const onlineCount = rows.filter((r) => r.status === 'online').length
+  // Power excludes offline (its live value is stale). Energy accumulators are
+  // valid even when currently offline, so Today/Total sum every inverter.
+  const powerTotal = rows.reduce((s, r) => s + (r.status === 'offline' ? 0 : (r.active_power_kw ?? 0)), 0)
+  const todayTotal = rows.reduce((s, r) => s + (r.daily_gen_kwh ?? 0), 0)
+  const totalMwh   = rows.reduce((s, r) => s + (r.total_gen_kwh ?? 0), 0) / 1000
+
+  const HEAD = 'text-[10px] uppercase tracking-[0.1em] font-semibold text-black/40'
 
   return (
     <div>
       <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
-        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Inverter</span>
-        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Status</span>
-        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Power</span>
-        {/* <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40 text-right">Daily gen</span> */}
+        <span className={HEAD}>Inverter</span>
+        <span className={HEAD}>Status</span>
+        <span className={`${HEAD} text-right`}>Power kW</span>
+        <span className={`${HEAD} text-right`}>Energy Today kWh</span>
+        <span className={`${HEAD} text-right`}>Energy Total MWh</span>
       </div>
 
       {rows.map((inv) => {
@@ -800,41 +811,43 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
           text: 'text-black/55',
         }
         const isOffline = inv.status === 'offline'
-        const kw = inv.active_power_kw ?? 0
         return (
           <div key={inv.device_id} className={`${INV_COLS} items-center py-3.5 border-b border-black/[0.06] last:border-0`}>
-            <span className={`text-[13px] font-semibold truncate pr-3 ${isOffline ? 'text-black/45' : 'text-black'}`}>
+            <span className={`text-[13px] font-semibold truncate pr-2 ${isOffline ? 'text-black/45' : 'text-black'}`}>
               {inv.name}
             </span>
 
-            <span className="flex items-center gap-2 min-w-0">
+            {/* dot always; label hidden on mobile to buy column width */}
+            <span className="flex items-center gap-1.5 min-w-0">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
-              <span className={`text-[12px] font-semibold truncate ${st.text}`}>{st.label}</span>
+              <span className={`hidden sm:inline text-[12px] font-semibold truncate ${st.text}`}>{st.label}</span>
             </span>
 
-            <span className="flex items-baseline justify-end gap-1">
-              {isOffline ? (
-                <span className="text-[13px] font-semibold text-black/30">—</span>
-              ) : (
-                <>
-                  <span className={T.metricM}>{kw.toFixed(1)}</span>
-                  <span className="text-[10px] text-black/50">kW</span>
-                </>
-              )}
+            <span className="text-right tabular-nums text-[13px] font-semibold">
+              {isOffline
+                ? <span className="text-black/30">—</span>
+                : <span className="text-black">{(inv.active_power_kw ?? 0).toFixed(1)}</span>}
             </span>
 
-            {/* daily-gen cell goes here — <span className="flex items-baseline justify-end gap-1">…</span> */}
+            <span className="text-right tabular-nums text-[13px] font-semibold text-black">
+              {(inv.daily_gen_kwh ?? 0).toLocaleString()}
+            </span>
+
+            <span className="text-right tabular-nums text-[13px] font-semibold text-black">
+              {((inv.total_gen_kwh ?? 0) / 1000).toFixed(1)}
+            </span>
           </div>
         )
       })}
 
       <div className={`${INV_COLS} items-baseline pt-2.5`}>
         <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Total output</span>
-        <span />
-        <span className="flex items-baseline justify-end gap-1">
-          <span className="text-[15px] font-semibold text-black tabular-nums">{total.toFixed(1)}</span>
-          <span className="text-[10px] text-black/50">kW</span>
+        <span className={`text-[13px] font-semibold tabular-nums ${onlineCount === rows.length ? 'text-[#497d00]' : 'text-black'}`}>
+          {onlineCount}/{rows.length}
         </span>
+        <span className="text-right text-[15px] font-semibold text-black tabular-nums">{powerTotal.toFixed(1)}</span>
+        <span className="text-right text-[15px] font-semibold text-black tabular-nums">{todayTotal.toLocaleString()}</span>
+        <span className="text-right text-[15px] font-semibold text-black tabular-nums">{totalMwh.toFixed(1)}</span>
       </div>
     </div>
   )
