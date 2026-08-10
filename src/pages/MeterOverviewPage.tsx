@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, Fragment } from 'react'
-import { Clock, Zap, TrendingUp, Gauge, Activity, RefreshCw, Sun } from 'lucide-react'
+import { Clock, RefreshCw, } from 'lucide-react'
 
 import api from '@/api/axios'
 import { useSite } from '@/context/SiteContext'
@@ -98,7 +98,8 @@ const FREQ_PF_COLUMNS: ColumnDef[] = [
 // ---- Helpers ----
 
 function formatValue(value: number) {
-  return value.toFixed(2)
+  if (value == null || Number.isNaN(value)) return '—'
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function formatLastUpdated(iso: string) {
@@ -109,6 +110,15 @@ function formatLastUpdated(iso: string) {
 function todayString() {
   return new Date().toISOString().split('T')[0]
 }
+
+function formatEnergyKwh(kwh: number | null | undefined): { value: string; unit: string } {
+  if (kwh == null) return { value: '—', unit: 'kWh' }
+  const abs = Math.abs(kwh)
+  if (abs >= 1_000_000) return { value: (kwh / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 }), unit: 'GWh' }
+  if (abs >= 1_000) return { value: (kwh / 1_000).toLocaleString(undefined, { maximumFractionDigits: 2 }), unit: 'MWh' }
+  return { value: kwh.toLocaleString(undefined, { maximumFractionDigits: 0 }), unit: 'kWh' }
+}
+
 
 // ============================================================
 // Shared building blocks — pulled 1:1 from PlantOverviewPage.tsx
@@ -169,87 +179,53 @@ function StatusChip({ status }: { status: string }) {
 // (per your call: the boxy comparison format works here),
 // but restyled to the shared type scale + orange/olive accents.
 // ============================================================
+
 function MeterSnapshotCard({ meter }: { meter: Meter }) {
-  const isOnline = meter.status === 'online'
+  const online = meter.status === 'online'
+  const today = formatEnergyKwh(meter.energy_today_kwh)
+  const total = formatEnergyKwh(meter.energy_active_export_kwh)
 
   return (
-    <div className="rounded-xl border border-black/15 overflow-hidden bg-white">
-      {/* Accent strip on top instead of a left border — matches the page's
-          horizontal accent-bar language better than a vertical stripe */}
-      <div className={"h-1 w-full bg-[#e17100]"} />
-
-      <div className="px-5 pt-4 pb-4">
-        {/* Name + status */}
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="min-w-0">
-            <p className="text-[16px] font-semibold text-black truncate">{meter.name}</p>
-          </div>
-          <StatusChip status={meter.status} />
+    <div className="rounded-lg px-4 py-3" style={{ background: online ? 'rgba(73,125,0,0.04)' : 'rgba(0,0,0,0.03)' }}>
+      <div className="flex items-center justify-between gap-3 mb-2.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: online ? '#22c55e' : 'rgba(0,0,0,0.25)' }} />
+          <p className="text-[13px] font-semibold text-black truncate">{meter.name}</p>
         </div>
-
-        {/* Key metrics — 2x2, hairline dividers instead of icon boxes */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-
-          <div className="flex items-start gap-2">
-            <Zap size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Active Power</p>
-              <p className={`${T.metricM} mt-0.5`}>
-                {meter.active_power_total_kw.toFixed(1)}
-                <span className={`${T.unit} ml-1`}>kW</span>
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-2">
-            <Sun size={14} className="text-[#e17100] mt-0.5 shrink-0" strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Today Export</p>
-              <p className={`${T.metricM} text-[#e17100] mt-0.5`}>
-                {meter.energy_today_kwh.toLocaleString()}
-                <span className={`${T.unit} ml-1`}>kWh</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <Gauge size={14} className="text-black mt-0.5 shrink-0" strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Power Factor</p>
-              <p className={`${T.metricM} mt-0.5`}>{meter.power_factor_total.toFixed(2)}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <TrendingUp size={14} className="text-[#497d00] mt-0.5 shrink-0" strokeWidth={2} />
-            <div className="min-w-0">
-              <p className={T.eyebrow}>Total Export</p>
-              <p className={`${T.metricM} text-[#497d00] mt-0.5`}>
-                {(meter.energy_active_export_kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                <span className={`${T.unit} ml-1`}>MWh</span>
-              </p>
-            </div>
-          </div>
-
-          
-        </div>
-
-        {/* Frequency + last updated, tucked below a hairline */}
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-black/10">
-          <div className="flex items-center gap-1.5">
-            <Activity size={12} className="text-black" strokeWidth={2} />
-            <span className={T.meta}>{meter.grid_frequency_hz.toFixed(2)} Hz</span>
-          </div>
-          <span className={`${T.meta} flex items-center gap-1`}>
-            <Clock size={11} strokeWidth={2} />
-            {isOnline && meter.last_updated ? formatLastUpdated(meter.last_updated) : (
-              <span className="text-red-600 font-semibold">OFFLINE</span>
-            )}
+        <div className="flex items-baseline gap-1 shrink-0">
+          <span className="text-[22px] font-semibold tracking-tight tabular-nums leading-none" style={{ color: online ? '#000' : 'rgba(0,0,0,0.3)' }}>
+            {online ? meter.active_power_total_kw.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
           </span>
+          <span className="text-[11px] text-black/50 font-medium">kW</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-2 border-t border-black/[0.08] pt-2">
+        <div>
+          <p className="text-[9.5px] text-black/50 mb-0.5">Today</p>
+          <p className="text-[12px] font-semibold tabular-nums" style={{ color: '#e17100' }}>
+            {today.value}<span className="text-[9px] text-black/40 font-normal ml-0.5">{today.unit}</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-[9.5px] text-black/50 mb-0.5">Export</p>
+          <p className="text-[12px] font-semibold text-black tabular-nums">
+            {total.value}<span className="text-[9px] text-black/40 font-normal ml-0.5">{total.unit}</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-[9.5px] text-black/50 mb-0.5">PF</p>
+          <p className="text-[12px] font-semibold text-black tabular-nums">{meter.power_factor_total.toFixed(2)}</p>
+        </div>
+        <div>
+          <p className="text-[9.5px] text-black/50 mb-0.5">Freq</p>
+          <p className="text-[12px] font-semibold text-black tabular-nums">{meter.grid_frequency_hz.toFixed(2)}</p>
         </div>
       </div>
     </div>
   )
 }
+
 
 // ============================================================
 // Editorial data table — no header shading, no zebra stripes.
@@ -272,25 +248,24 @@ function MeterTable({
   return (
     <div>
       <SectionHeader title={title} meta={meta} accent={accent} />
-      <div className="overflow-x-auto -mx-1 px-1">
-        <table className="w-full text-[13px] min-w-[640px] border-collapse">
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <table className="w-full text-[13px] border-collapse min-w-[480px]">
           <thead>
             <tr className="border-b border-black/15">
-              <th className="sticky left-0 bg-white text-left text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5">
+              <th className="text-left text-[10.5px] uppercase tracking-[0.08em] text-black font-semibold px-2.5 py-2 whitespace-nowrap">
                 Meter
               </th>
-              <th className="w-px text-center text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+              <th className="w-px text-center text-[10.5px] uppercase tracking-[0.08em] text-black font-semibold px-2.5 py-2 whitespace-nowrap">
                 Status
               </th>
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap"
+                  className="text-right text-[10.5px] uppercase tracking-[0.08em] text-black font-semibold px-2.5 py-2 whitespace-nowrap"
                 >
                   {c.label}
                 </th>
               ))}
-              
             </tr>
           </thead>
           <tbody>
@@ -299,21 +274,21 @@ function MeterTable({
                 <tr>
                   <td
                     colSpan={columns.length + 2}
-                    className="px-3 pt-4 pb-1.5 text-[11px] uppercase tracking-[0.12em] text-black/50 font-semibold"
+                    className="px-2.5 pt-3 pb-1 text-[10.5px] uppercase tracking-[0.1em] text-black/50 font-semibold whitespace-nowrap"
                   >
                     {group.label}
                   </td>
                 </tr>
                 {group.meters.map((m) => (
-                  <tr key={m.device_pk} className="border-b border-black/10">
-                    <td className="sticky left-0 bg-white py-3 px-3 font-semibold text-black whitespace-nowrap">
+                  <tr key={m.device_pk} className="border-b border-black/[0.07]">
+                    <td className="py-2 px-2.5 font-semibold text-black whitespace-nowrap">
                       {m.name}
                     </td>
-                    <td className="w-px py-3 px-3 text-center whitespace-nowrap">
+                    <td className="w-px py-2 px-2.5 text-center whitespace-nowrap">
                       <StatusChip status={m.status} />
                     </td>
                     {columns.map((c) => (
-                      <td key={c.key} className="py-3 px-3 text-right text-black font-medium tabular-nums">
+                      <td key={c.key} className="py-2 px-2.5 text-right text-black font-medium tabular-nums whitespace-nowrap">
                         {formatValue(m[c.key] as number)}
                       </td>
                     ))}
@@ -384,7 +359,7 @@ export default function MeterOverviewPage() {
     .at(-1)
 
   return (
-    <div className="w-full max-w-[1152px] mx-auto px-0 sm:px-6 md:px-6 lg:px-6 pb-10">
+    <div className="max-w-6xl px-0 mx-auto sm:px-6 md:px-4 lg:px-2 xl:px-0 pb-10">
 
       {/* ============ HEADER ============ */}
       <header className="pb-5 flex flex-col md:flex-row md:items-start md:justify-between md:flex-wrap gap-3 md:gap-6">
@@ -439,11 +414,12 @@ export default function MeterOverviewPage() {
               meta={`${todayString()} · Today's generation vs cumulative export`}
               accent="orange"
             />
-            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 mb-4">
               {data?.meters.map((m) => (
                 <MeterSnapshotCard key={m.device_pk} meter={m} />
               ))}
             </div>
+            
           </Section>
         </>
       )}
