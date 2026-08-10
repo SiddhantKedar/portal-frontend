@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, X, Plus, Loader2, RefreshCw} from 'lucide-react'
+import { ChevronDown, X, Plus, Loader2, RefreshCw, Download} from 'lucide-react'
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
+  Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ComposedChart, Tooltip, ReferenceArea,
 } from 'recharts'
 import { DatePicker } from '@/components/DatePicker'
 import api from '@/api/axios'
@@ -85,14 +80,24 @@ const DEVICE_TYPE_LABEL: Record<string, string> = {
 
 // ---- Helpers ----
 
+function minutesFromIstDayStart(iso: string, day: string) {
+  const dayStartMs = Date.parse(`${day}T00:00:00+05:30`)
+  return (Date.parse(iso) - dayStartMs) / 60000
+}
+
+function formatMinutesTick(minutes: number) {
+  const total = Math.round(minutes)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+const DAY_TICKS = [0, 180, 360, 540, 720, 900, 1080, 1260, 1440]
+
 function todayString() {
   return new Date().toISOString().split('T')[0]
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
 
 function newChartRow(): ChartRow {
   return {
@@ -241,6 +246,69 @@ function MultiSelect({
   )
 }
 
+function AnalyticsTooltip({ active, payload, lines }: any) {
+  if (!active || !payload?.length) return null
+  const t = payload[0]?.payload?.time
+  return (
+    <div className="rounded-lg border border-black bg-white px-3 py-2 min-w-[180px]">
+      <p className="text-[12px] font-semibold text-black mb-1.5">
+        {typeof t === 'number' ? formatMinutesTick(t) : ''}
+      </p>
+      {payload.map((e: any) => {
+        const line = lines.find((l: any) => l.dataKey === e.dataKey)
+        return (
+          <div key={e.dataKey} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
+            <span className="text-[12px] text-black/50 truncate">{e.name}</span>
+            <span className="text-[12px] font-semibold tabular-nums text-black ml-auto">
+              {e.value == null ? '—' : Number(e.value).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-[11px] text-black/50 shrink-0">{line?.unit ?? ''}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- CSV Downloader --
+function downloadAnalyticsCsv(row: ChartRow) {
+  if (!row.data || row.data.legend.length === 0) return
+
+  const legend = row.data.legend
+  const headers = ['Timestamp (IST)', ...legend.map((l) => `${l.device_name} - ${l.label} (${l.unit})`)]
+
+  const rows = row.data.data.map((point) => {
+    const ist = new Date(point.time).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    }).replace(',', '')
+    const values = legend.map((l) => {
+      const v = point[l.key]
+      return v == null ? '' : String(v)
+    })
+    return [ist, ...values]
+  })
+
+  const csvLines = [headers, ...rows].map((r) =>
+    r.map((cell) => (cell.includes(',') ? `"${cell}"` : cell)).join(',')
+  )
+  const csvContent = '\uFEFF' + csvLines.join('\r\n') // UTF-8 BOM, matches Reports export
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `analytics_${row.date}_${row.id.slice(0, 8)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+
 // ---- One self-contained chart row ----
 
 function ChartRowCard({
@@ -295,46 +363,134 @@ function ChartRowCard({
   // time for display, never coerce missing keys to 0.
   const chartData = useMemo(() => {
     if (!row.data) return []
-    return row.data.data.map((point) => ({
-      ...point,
-      time: formatTime(point.time),
-    }))
-  }, [row.data])
+    const pts = row.data.data
+      .map((point) => ({
+        ...point,
+        time: minutesFromIstDayStart(point.time, row.date),
+      }))
+      .filter((p) => p.time >= 0 && p.time <= 1440)
+      .sort((a, b) => a.time - b.time)
 
-  const chartConfig = useMemo(() => {
-    const cfg: Record<string, { label: string; color: string }> = {}
-    lines.forEach((l) => {
-      cfg[l.dataKey] = { label: l.name, color: l.color }
-    })
-    return cfg
-  }, [lines])
+    if (pts.length < 2) return pts
+
+    // Infer typical sample spacing from the data itself, then break the line
+    // wherever a gap exceeds ~2.5x that spacing (offline device, dropped poll).
+    const gaps = pts.slice(1).map((p, i) => p.time - pts[i].time).filter((g) => g > 0)
+    const median = gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)] ?? 5
+    const gapThreshold = median * 2.5
+
+    const out: typeof pts = []
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[i - 1]
+      if (prev && pts[i].time - prev.time > gapThreshold) {
+        out.push({ time: prev.time + median, ...Object.fromEntries(row.data!.legend.map((l) => [l.key, undefined])) })
+      }
+      out.push(pts[i])
+    }
+    return out
+  }, [row.data, row.date])
+
 
   const headerTitle = selectedMetrics.length === 0
     ? 'New Chart'
     : selectedMetrics.map((m) => m.label).join(' + ')
 
+  const [refLeft, setRefLeft] = useState<number | null>(null)
+  const [refRight, setRefRight] = useState<number | null>(null)
+  const [zoomLeft, setZoomLeft] = useState<number | null>(null)
+  const [zoomRight, setZoomRight] = useState<number | null>(null)
+
+  // Reset zoom whenever new data comes in (new Generate click, new date, etc.)
+  useEffect(() => {
+    setZoomLeft(null)
+    setZoomRight(null)
+    setRefLeft(null)
+    setRefRight(null)
+  }, [row.data])
+
+  function handleMouseDown(e: any) {
+    if (e?.activeLabel == null) return
+    setRefLeft(e.activeLabel)
+    setRefRight(e.activeLabel)
+  }
+
+  function handleMouseMove(e: any) {
+    if (refLeft === null || e?.activeLabel == null) return
+    setRefRight(e.activeLabel)
+  }
+
+  function handleMouseUp() {
+    if (refLeft === null || refRight === null) {
+      setRefLeft(null)
+      setRefRight(null)
+      return
+    }
+    let [lo, hi] = [refLeft, refRight].sort((a, b) => a - b)
+    // Ignore accidental clicks/tiny drags — require at least 15 minutes of selection
+    if (hi - lo < 15) {
+      setRefLeft(null)
+      setRefRight(null)
+      return
+    }
+    setZoomLeft(lo)
+    setZoomRight(hi)
+    setRefLeft(null)
+    setRefRight(null)
+  }
+
+  function zoomOut() {
+    setZoomLeft(null)
+    setZoomRight(null)
+  }
+
+  const isZoomed = zoomLeft !== null && zoomRight !== null
+
+  const xDomain: [number, number] = isZoomed ? [zoomLeft!, zoomRight!] : [0, 1440]
+
+  const xTicks = useMemo(() => {
+    if (!isZoomed) return DAY_TICKS
+    const span = zoomRight! - zoomLeft!
+    const step = span > 360 ? 60 : span > 120 ? 30 : span > 40 ? 10 : 5
+    const ticks: number[] = []
+    const start = Math.ceil(zoomLeft! / step) * step
+    for (let t = start; t <= zoomRight!; t += step) ticks.push(t)
+    return ticks
+  }, [isZoomed, zoomLeft, zoomRight])
+
   return (
     <div className="rounded-xl border border-black/15 bg-white overflow-visible">
       <div className="px-6 pt-5 pb-4">
         <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="min-w-0">
-            <p className="text-[16px] font-semibold text-black truncate">{headerTitle}</p>
-            {row.hasGenerated && row.data && (
-              <p className={`${T.meta} mt-0.5`}>
-                {row.date === todayString() ? 'Today' : row.date}
-              </p>
-            )}
-          </div>
+        <div className="min-w-0">
+          <p className="text-[16px] font-semibold text-black truncate">{headerTitle}</p>
+          {row.hasGenerated && row.data && (
+            <p className={`${T.meta} mt-0.5`}>
+              {row.date === todayString() ? 'Today' : row.date}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {row.hasGenerated && row.data && row.data.legend.length > 0 && (
+            <button
+              type="button"
+              onClick={() => downloadAnalyticsCsv(row)}
+              className="h-9 px-3 flex items-center gap-1.5 border border-black/25 rounded-lg text-black hover:bg-black hover:text-white transition-colors text-[13px] font-semibold shrink-0"
+            >
+              <Download size={14} strokeWidth={2} />
+              Download
+            </button>
+          )}
           {canRemove && (
             <button
               type="button"
               onClick={onRemove}
-              className="text-black/40 hover:text-red-600 transition-colors shrink-0"
+              className="text-black/40 hover:text-red-600 transition-colors"
             >
               <X size={18} />
             </button>
           )}
         </div>
+      </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <MultiSelect
@@ -419,37 +575,93 @@ function ChartRowCard({
             <p className={T.meta}>No data available for this combination.</p>
           </div>
         ) : (
-          <ChartContainer config={chartConfig} style={{ height: 240, width: '100%' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: dualAxis ? 20 : 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 12, fill: '#171717' }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  yAxisId="left"
-                  tick={{ fontSize: 12, fill: '#171717' }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={46}
-                  label={leftUnit ? { value: leftUnit, angle: -90, position: 'insideLeft', fontSize: 11, fill: '#171717' } : undefined}
-                />
-                {dualAxis && (
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: 12, fill: '#171717' }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={46}
+          <div className="h-[280px] sm:h-[380px] w-full relative">
+          {isZoomed && (
+            <button
+              type="button"
+              onClick={zoomOut}
+              className="absolute -top-8 right-0 z-10 h-7 px-2.5 flex items-center gap-1 text-[12px] font-semibold text-black border border-black/25 rounded-md hover:bg-black hover:text-white transition-colors"
+            >
+              Zoom Out
+            </button>
+          )}
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              style={{ cursor: 'crosshair', userSelect: 'none' }}
+            >
+              <defs>
+                <linearGradient id={`analyticsGradient-${row.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lines[0]?.color ?? '#e17100'} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={lines[0]?.color ?? '#e17100'} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F1" vertical={false} />
+              <XAxis
+                dataKey="time"
+                type="number"
+                scale="linear"
+                domain={xDomain}
+                allowDataOverflow
+                ticks={xTicks}
+                tickFormatter={formatMinutesTick}
+                tick={{ fontSize: 12, fill: '#171717' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                yAxisId="left"
+                domain={([dataMin, dataMax]: readonly [number, number]) => {
+                  const lo = Math.min(0, dataMin)
+                  const hi = Math.max(0, dataMax)
+                  const span = hi - lo || 1
+                  const pad = span * 0.08
+                  return [Math.floor(lo - pad), Math.ceil(hi + pad)]
+                }}
+                tick={{ fontSize: 12, fill: '#171717' }}
+                tickLine={false}
+                axisLine={false}
+                width={48}
+              />
+              {dualAxis && (
+               <YAxis
+                yAxisId="right"
+                orientation="right"
+                domain={([dataMin, dataMax]: readonly [number, number]) => {
+                  const lo = Math.min(0, dataMin)
+                  const hi = Math.max(0, dataMax)
+                  const span = hi - lo || 1
+                  const pad = span * 0.08
+                  return [Math.floor(lo - pad), Math.ceil(hi + pad)]
+                }}
+                tick={{ fontSize: 12, fill: '#171717' }}
+                tickLine={false}
+                axisLine={false}
+                width={46}
+              />
+            )}
+              <Tooltip cursor={{ stroke: '#00000022', strokeWidth: 1 }} content={<AnalyticsTooltip lines={lines} />} />
+              {lines.map((line, i) =>
+                i === 0 ? (
+                  <Area
+                    key={line.dataKey}
+                    yAxisId={dualAxis ? line.axisId : 'left'}
+                    type="monotone"
+                    dataKey={line.dataKey}
+                    name={line.name}
+                    stroke={line.color}
+                    strokeWidth={1.75}
+                    fill={`url(#analyticsGradient-${row.id})`}
+                    dot={false}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                    activeDot={{ r: 4, fill: line.color }}
                   />
-                )}
-                <ChartTooltip content={<ChartTooltipContent />} />
-                {lines.map((line) => (
+                ) : (
                   <Line
                     key={line.dataKey}
                     yAxisId={dualAxis ? line.axisId : 'left'}
@@ -457,15 +669,27 @@ function ChartRowCard({
                     dataKey={line.dataKey}
                     name={line.name}
                     stroke={line.color}
-                    strokeWidth={1.5}
+                    strokeWidth={1.25}
                     dot={false}
                     connectNulls={false}
-                    activeDot={{ r: 4, fill: line.color }}
+                    isAnimationActive={false}
+                    activeDot={{ r: 3.5, fill: line.color }}
                   />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartContainer>
+                )
+              )}
+              {refLeft !== null && refRight !== null && refLeft !== refRight && (
+                <ReferenceArea
+                  yAxisId="left"
+                  x1={refLeft}
+                  x2={refRight}
+                  strokeOpacity={0.3}
+                  fill="#e17100"
+                  fillOpacity={0.12}
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
         )}
       </div>
     </div>
@@ -551,6 +775,8 @@ export default function AnalyticsPage() {
             <RefreshCw size={14} strokeWidth={2} />
             Refresh All
           </button>
+
+          
         </div>
 
         <div className="order-2 md:order-1 min-w-0">
