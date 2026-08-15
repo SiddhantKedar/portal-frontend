@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useMemo } from 'react'
-import { Zap, TrendingUp, Cpu, Clock, RefreshCw, Sun } from 'lucide-react'
+import { Zap, TrendingUp, Cpu, Clock, RefreshCw, Sun, Activity } from 'lucide-react'
 import {
   Area, XAxis, YAxis,
   CartesianGrid, ResponsiveContainer, Line, ComposedChart, Tooltip,
@@ -38,7 +38,8 @@ interface InverterData {
   inverter_efficiency_pct: number | null
   performance_ratio_pct: number | null
   status: string
-  last_updated: string
+  inverter_status: { code: number; label: string } | null
+  last_updated: string | null 
 }
 
 interface InverterOverview {
@@ -48,6 +49,14 @@ interface InverterOverview {
     total_energy_daily_kwh: number
     online_count: number
     total_count: number
+    states: {
+      running: number
+      stopped: number
+      standby: number
+      warning: number
+      fault: number
+      other: number
+    }
     performance_ratio_pct: number
     poa_irradiation_kwh_m2: number
   }
@@ -93,6 +102,25 @@ function todayString() {
   return new Date().toISOString().split('T')[0]
 }
 
+
+// Device-reported status code → colours. Canonical: 0 Stopped · 1 Running · 2 Standby · 4 Warning · 8 Fault
+const INV_STATE: Record<number, { label: string; dot: string; text: string; hex: string; tint: string }> = {
+  0: { label: 'Stopped', dot: 'bg-black/40',  text: 'text-black/60',  hex: '#9ca3af', tint: 'rgba(0,0,0,0.03)' },
+  1: { label: 'Running', dot: 'bg-green-500', text: 'text-green-700', hex: '#22c55e', tint: 'rgba(73,125,0,0.04)' },
+  2: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55',  hex: '#94a3b8', tint: 'rgba(0,0,0,0.03)' },
+  4: { label: 'Warning', dot: 'bg-[#e17100]', text: 'text-[#e17100]', hex: '#e17100', tint: 'rgba(225,113,0,0.05)' },
+  8: { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600',   hex: '#dc2626', tint: 'rgba(220,38,38,0.04)' },
+}
+
+const INV_OFFLINE = { label: 'Offline', dot: 'bg-red-500', text: 'text-red-600', hex: '#dc2626', tint: 'rgba(0,0,0,0.03)' }
+
+// Two axes: offline (unreachable) wins — there's no last-known state to carry.
+function invStatusMeta(inv: Pick<InverterData, 'status' | 'inverter_status'>) {
+  if (inv.status === 'offline' || inv.inverter_status == null) return INV_OFFLINE
+  const { code, label } = inv.inverter_status
+  return INV_STATE[code] ?? { label: label || `Code ${code}`, dot: 'bg-black/30', text: 'text-black/55', hex: '#94a3b8', tint: 'rgba(0,0,0,0.03)' }
+}
+
 // ============================================================
 // Shared building blocks — identical to PlantOverview/MeterOverview
 // ============================================================
@@ -133,30 +161,16 @@ function Section({ children }: { children: React.ReactNode }) {
   return <section className="pt-6">{children}</section>
 }
 
-function StatusChip({ status }: { status: string }) {
-  const online = status === 'online'
-  const dot = online ? 'bg-green-500' : 'bg-black/25'
-  const tone = online ? 'text-green-700' : 'text-black/50'
+function StatusChip({ inv }: { inv: Pick<InverterData, 'status' | 'inverter_status'> }) {
+  const { label, dot, text } = invStatusMeta(inv)
   return (
     <div className="inline-flex items-center gap-2 h-7 pl-2.5 pr-3 rounded-full border border-black/15 bg-white shrink-0">
       <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />
-      <span className={`text-[12px] font-semibold ${tone} uppercase tracking-[0.08em]`}>{status}</span>
+      <span className={`text-[12px] font-semibold ${text} uppercase tracking-[0.08em]`}>{label}</span>
     </div>
   )
 }
 
-function HealthFooter({ online, total }: { online: number; total: number }) {
-  const allUp = online === total
-  const off = total - online
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: allUp ? '#497d00' : '#dc2626' }} />
-      <span style={{ color: allUp ? '#497d00' : '#dc2626' }}>
-        {allUp ? 'All online' : `${off} offline`}
-      </span>
-    </span>
-  )
-}
 
 function ChartEmpty({ height, label = 'No data for this day' }: { height: string; label?: string }) {
   return (
@@ -364,15 +378,16 @@ function PowerTrendCard({
 
 function InverterSnapshotCard({ inv }: { inv: InverterData }) {
   const online = inv.status === 'online'
-  const fault = inv.status === 'fault'
-  const tint = fault ? 'rgba(220,38,38,0.04)' : online ? 'rgba(73,125,0,0.04)' : 'rgba(0,0,0,0.03)'
-  const dotColor = fault ? '#dc2626' : online ? '#22c55e' : 'rgba(0,0,0,0.2)'
+  const st = invStatusMeta(inv)
 
   return (
-    <div className="rounded-xl px-4 py-4" style={{ background: tint }}>
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-xl px-4 py-4" style={{ background: st.tint }}>
+      <div className="flex items-center justify-between mb-4 gap-2">
         <p className={`text-[15px] font-semibold truncate ${online ? 'text-black' : 'text-black/50'}`}>{inv.name}</p>
-        <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: dotColor }} />
+        <span className="inline-flex items-center gap-1.5 shrink-0">
+          <span className="w-[7px] h-[7px] rounded-full" style={{ background: st.hex }} />
+          <span className={`text-[11px] font-semibold uppercase tracking-[0.06em] ${st.text}`}>{st.label}</span>
+        </span>
       </div>
 
       <div className="flex items-end gap-4 mb-3.5 flex-wrap">
@@ -404,11 +419,21 @@ function InverterSnapshotCard({ inv }: { inv: InverterData }) {
         <span className="mx-1.5 text-black/25">·</span>
         PR {inv.performance_ratio_pct != null ? `${inv.performance_ratio_pct.toFixed(1)}%` : '—'}
         <span className="mx-1.5 text-black/25">·</span>
-        {formatLastUpdated(inv.last_updated)}
+        {inv.last_updated ? formatLastUpdated(inv.last_updated) : '—'}
       </p>
     </div>
   )
 }
+
+
+const STATE_ORDER: { key: keyof InverterOverview['summary']['states']; label: string; text: string }[] = [
+  { key: 'fault',   label: 'Fault',   text: 'text-red-600' },
+  { key: 'warning', label: 'Warning', text: 'text-[#e17100]' },
+  { key: 'running', label: 'Running', text: 'text-green-700' },
+  { key: 'standby', label: 'Standby', text: 'text-black/70' },
+  { key: 'stopped', label: 'Stopped', text: 'text-black/70' },
+  { key: 'other',   label: 'Other',   text: 'text-black/70' },
+]
 
 // ============================================================
 // Editorial inverters table — PR + efficiency both shown as distinct columns
@@ -467,7 +492,7 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
                   </td>
                   <td className="py-3 px-3 text-center">
                     <div className="inline-flex">
-                      <StatusChip status={inv.status} />
+                      <StatusChip inv={inv} />
                     </div>
                   </td>
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
@@ -630,6 +655,8 @@ export default function InverterOverviewPage() {
 
   const overallPR = overview?.summary.performance_ratio_pct ?? 0
 
+  const anyState = overview ? Object.values(overview.summary.states).some((v) => v > 0) : false
+
   return (
     <div className="w-full max-w-[1152px] mx-auto px-0 sm:px-6 md:px-6 lg:px-6">
 
@@ -733,12 +760,32 @@ export default function InverterOverviewPage() {
           <Cpu size={15} className="text-black/40 shrink-0" strokeWidth={2} />
           <span className={T.eyebrow}>Inverters Online</span>
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className={T.metricL}>
-            {overview?.summary.online_count ?? '—'}<span className={`${T.unit} ml-1`}>/ {overview?.summary.total_count ?? '—'}</span>
-          </span>
-          {overview && <HealthFooter online={overview.summary.online_count} total={overview.summary.total_count} />}
+        <span className={`${T.metricL} shrink-0`}>
+          {overview?.summary.online_count ?? '—'}<span className={`${T.unit} ml-1`}>/ {overview?.summary.total_count ?? '—'}</span>
+        </span>
+      </div>
+
+      <div className="flex items-start justify-between py-3.5 gap-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Activity size={15} className="text-black/40 shrink-0" strokeWidth={2} />
+          <span className={T.eyebrow}>Status</span>
         </div>
+        {anyState ? (
+          <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1.5 shrink-0">
+            {STATE_ORDER.map(({ key, label, text }) => {
+              const count = overview!.summary.states[key]
+              if (count <= 0) return null
+              return (
+                <span key={key} className="inline-flex items-baseline gap-1.5">
+                  <span className={`text-[18px] font-semibold tabular-nums leading-none ${text}`}>{count}</span>
+                  <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-black/45">{label}</span>
+                </span>
+              )
+            })}
+          </div>
+        ) : (
+          <span className="text-[13px] text-black/40">—</span>
+        )}
       </div>
 
       <div className="flex items-center justify-between py-3.5 gap-4">

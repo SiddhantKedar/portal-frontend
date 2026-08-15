@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Sun, SunMedium, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu, TrendingUp, Leaf,
+  AlertTriangle, WifiOff,
 } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
 import {
@@ -61,14 +62,23 @@ interface PlantOverview {
     name: string
     active_power_kw: number
     daily_gen_kwh: number
-    total_gen_kwh: number 
+    total_gen_kwh: number
     status: string
-    last_updated: string
+    inverter_status: { code: number; label: string } | null
+    last_updated: string | null          // dummy offline row sends null
   }[]
   device_summary: {
     total: number
     online: number
     offline: number
+    states: {
+      running: number
+      stopped: number
+      standby: number
+      warning: number
+      fault: number
+      other: number
+    }
   }
   weather: {
     irradiation_inclined_wm2: number
@@ -241,24 +251,71 @@ function Divider() {
   return <div className="h-px w-full bg-black/15" />
 }
 
-// Status chip — proper pill with unified height so mixed icon/text sizes
-// don't visually stagger. Border + bg gives it a coherent silhouette.
+
+type Pill = { label: string; count: number; tone: ChipTone; icon: React.ElementType }
+
+function InverterStatusChips({ summary }: { summary?: PlantOverview['device_summary'] }) {
+  if (!summary) return <StatusChip label="Inverters" value="—" tone="neutral" icon={Cpu} />
+
+  const { states, offline, total } = summary
+
+  // Main chip = dominant operational state. Generating leads whenever anything is
+  // producing; otherwise the fleet's idle state headlines, so an all-standby dawn
+  // fleet reads "4/4 Standby" instead of a false "0/4 Generating".
+  let mainLabel = 'Generating'
+  let mainCount = states.running
+  const mainTone: ChipTone = states.running > 0 ? 'good' : 'neutral'
+  if (states.running === 0) {
+    if (states.standby > 0)      { mainLabel = 'Standby'; mainCount = states.standby }
+    else if (states.stopped > 0) { mainLabel = 'Stopped'; mainCount = states.stopped }
+  }
+
+  // Secondary pills: problems + any other populated bucket, headline excluded, zeros omitted.
+  const pills: Pill[] = []
+  if (states.fault > 0)   pills.push({ label: 'Fault',   count: states.fault,   tone: 'bad',     icon: AlertTriangle })
+  if (states.warning > 0) pills.push({ label: 'Warning', count: states.warning, tone: 'warn',    icon: AlertTriangle })
+  if (offline > 0)        pills.push({ label: 'Offline', count: offline,         tone: 'bad',     icon: WifiOff })
+  if (states.standby > 0 && mainLabel !== 'Standby') pills.push({ label: 'Standby', count: states.standby, tone: 'neutral', icon: Power })
+  if (states.stopped > 0 && mainLabel !== 'Stopped') pills.push({ label: 'Stopped', count: states.stopped, tone: 'neutral', icon: Power })
+  if (states.other > 0)   pills.push({ label: 'Other',   count: states.other,   tone: 'neutral', icon: Cpu })
+
+  return (
+    <>
+      <StatusChip label={mainLabel} value={`${mainCount}/${total}`} tone={mainTone} icon={Cpu} />
+      {pills.map((p) => (
+        <StatusChip key={p.label} label={p.label} value={String(p.count)} tone={p.tone} icon={p.icon} />
+      ))}
+    </>
+  )
+}
+
+
+type ChipTone = 'good' | 'warn' | 'bad' | 'neutral'
+
+const CHIP_TONE: Record<ChipTone, { dot: string; text: string }> = {
+  good:    { dot: 'bg-green-500', text: 'text-green-700' },
+  warn:    { dot: 'bg-[#e17100]', text: 'text-[#e17100]' },
+  bad:     { dot: 'bg-red-500',   text: 'text-red-600' },
+  neutral: { dot: 'bg-black',     text: 'text-black' },
+}
+
 function StatusChip({
-  label, value, healthy, icon: Icon,
+  label, value, healthy, tone, icon: Icon,
 }: {
   label: string
   value: string
-  healthy: boolean | null
+  healthy?: boolean | null      // kept for Breaker / Generation callers
+  tone?: ChipTone               // explicit override when set
   icon: React.ElementType
 }) {
-  const dot = healthy === null ? 'bg-black' : healthy ? 'bg-green-500' : 'bg-red-500'
-  const tone = healthy === null ? 'text-black' : healthy ? 'text-green-700' : 'text-red-600'
+  const resolved: ChipTone = tone ?? (healthy == null ? 'neutral' : healthy ? 'good' : 'bad')
+  const { dot, text } = CHIP_TONE[resolved]
   return (
     <div className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 rounded-full border border-black/15 bg-white shrink-0">
       <Icon size={13} className="text-black shrink-0" strokeWidth={2} />
       <span className="text-[11px] uppercase tracking-[0.1em] text-black font-semibold">{label}</span>
       <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />
-      <span className={`text-[13px] font-semibold ${tone} tabular-nums whitespace-nowrap`}>{value}</span>
+      <span className={`text-[13px] font-semibold ${text} tabular-nums whitespace-nowrap`}>{value}</span>
     </div>
   )
 }
@@ -761,20 +818,29 @@ const POWER_GROUPS = [
 // Inverter 
 type InverterRow = PlantOverview['inverters'][number]
 
-// Status → dot + label. Extend as new states land (running, fault, standby,
-// derating…). Green stays reserved for healthy/producing states, red for
-// offline/fault, muted for idle. Unknown values fall through to a neutral row.
-const INV_STATUS: Record<string, { label: string; dot: string; text: string }> = {
-  online:  { label: 'Online',  dot: 'bg-[#22C55E]', text: 'text-green-700' },
-  running: { label: 'Running', dot: 'bg-[#22C55E]', text: 'text-green-700' },
-  standby: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55' },
-  fault:   { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600' },
-  offline: { label: 'Offline', dot: 'bg-red-600',   text: 'text-red-600' },
+// Device-reported status code → dot + label colour.
+// Canonical: 0 Stopped · 1 Running · 2 Standby · 4 Warning · 8 Fault
+const INV_STATE: Record<number, { label: string; dot: string; text: string }> = {
+  0: { label: 'Stopped', dot: 'bg-black/40',  text: 'text-black/60' },
+  1: { label: 'Running', dot: 'bg-green-500', text: 'text-green-700' },
+  2: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55' },
+  4: { label: 'Warning', dot: 'bg-[#e17100]', text: 'text-[#e17100]' },
+  8: { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600' },
+}
+
+// Resolve a row's status from both axes. Offline (unreachable) wins the dot —
+// there is no last-known device state to carry, so it can't be a false Running.
+function invStatusMeta(inv: InverterRow): { label: string; dot: string; text: string } {
+  if (inv.status === 'offline' || inv.inverter_status == null) {
+    return { label: 'Offline', dot: 'bg-red-600', text: 'text-red-600' }
+  }
+  const { code, label } = inv.inverter_status
+  return INV_STATE[code] ?? { label: label || `Code ${code}`, dot: 'bg-black/30', text: 'text-black/55' }
 }
 
 // Name | Status | Power | Today | Total
 const INV_COLS =
-  'grid grid-cols-[minmax(150px,1fr)_36px_96px_120px_120px] sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]'
+  'grid grid-cols-[minmax(140px,1fr)_88px_96px_120px_120px] sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]'
 
 function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   if (!inverters.length) {
@@ -798,7 +864,7 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
     // Horizontal scroll on mobile — 5 columns need more width than a phone has.
     // min-w forces the overflow; released at sm where the section is wide enough.
     <div className="overflow-x-auto">
-      <div className="min-w-[522px] sm:min-w-0">
+      <div className="min-w-[574px] sm:min-w-0">
 
         <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
           <span className={HEAD}>Inverter</span>
@@ -809,11 +875,7 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
         </div>
 
         {rows.map((inv) => {
-          const st = INV_STATUS[inv.status] ?? {
-            label: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
-            dot: 'bg-black/30',
-            text: 'text-black/55',
-          }
+          const st = invStatusMeta(inv)
           const isOffline = inv.status === 'offline'
           return (
             <div key={inv.device_id} className={`${INV_COLS} items-center py-3.5 border-b border-black/[0.06] last:border-0`}>
@@ -821,10 +883,9 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
                 {inv.name}
               </span>
 
-              {/* dot only on mobile; label from sm+ */}
               <span className="flex items-center gap-1.5 min-w-0">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
-                <span className={`hidden sm:inline text-[12px] font-semibold truncate ${st.text}`}>{st.label}</span>
+                <span className={`text-[12px] font-semibold whitespace-nowrap ${st.text}`}>{st.label}</span>
               </span>
 
               <span className="text-right tabular-nums text-[13px] font-semibold">
@@ -1623,12 +1684,7 @@ export default function PlantOverviewPage() {
                   healthy={overview?.breaker_status == null ? null : overview.breaker_status === 'on'}
                   icon={Power}
                 />
-                <StatusChip
-                  label="Inverters"
-                  value={`${overview?.device_summary.online ?? 0}/${overview?.device_summary.total ?? 0} Online`}
-                  healthy={overview ? overview.device_summary.online === overview.device_summary.total : null}
-                  icon={Cpu}
-                />
+                <InverterStatusChips summary={overview?.device_summary} />
                 <GenerationChip gen={overview?.generation_window} />
               </div>
             </div>
