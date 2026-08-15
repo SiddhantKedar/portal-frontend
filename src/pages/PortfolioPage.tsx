@@ -241,10 +241,11 @@ const tempStatusMeta = (code: number) =>
 
 // TEMP types — mirror the admin payload
 interface TempStatePoint { code: number; label: string; start: string; end: string | null }
+
 interface TempInverter {
   device_id: string
   name: string
-  current: { code: number; label: string; since: string }
+  current: { code: number; label: string; since: string } | null   // null when offline / not reporting
   history: TempStatePoint[]
 }
 interface TempSite {
@@ -279,8 +280,21 @@ function TempSubHead({ label, color, caption }: { label: string; color: string; 
   )
 }
 
-// TEMP — LIVE: compact current-status card for one inverter
+// TempLiveCard — line 283
 function TempLiveCard({ inv }: { inv: TempInverter }) {
+  // current is null when the inverter isn't reporting a device state (offline / no upstream data)
+  if (!inv.current) {
+    return (
+      <div className="rounded-lg border px-2.5 py-2 bg-black/[0.03] border-black/10">
+        <p className="text-[12px] font-semibold text-black truncate leading-tight">{inv.name}</p>
+        <div className="flex items-center gap-1.5 mt-1">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-black/25" />
+          <span className="text-[11px] font-semibold truncate text-black/45">No data</span>
+        </div>
+        <p className="text-[10px] text-black/35 mt-0.5">—</p>
+      </div>
+    )
+  }
   const m = tempStatusMeta(inv.current.code)
   return (
     <div className={`rounded-lg border px-2.5 py-2 ${m.card}`}>

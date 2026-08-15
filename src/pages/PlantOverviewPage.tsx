@@ -774,7 +774,7 @@ const INV_STATUS: Record<string, { label: string; dot: string; text: string }> =
 
 // Name | Status | Power | Today | Total
 const INV_COLS =
-  'grid grid-cols-[minmax(0,1fr)_44px_62px_58px_64px] sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]'
+  'grid grid-cols-[minmax(150px,1fr)_36px_96px_120px_120px] sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]'
 
 function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   if (!inverters.length) {
@@ -795,59 +795,65 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
   const HEAD = 'text-[10px] uppercase tracking-[0.1em] font-semibold text-black/40'
 
   return (
-    <div>
-      <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
-        <span className={HEAD}>Inverter</span>
-        <span className={HEAD}>Status</span>
-        <span className={`${HEAD} text-right`}>Power kW</span>
-        <span className={`${HEAD} text-right`}>Energy Today kWh</span>
-        <span className={`${HEAD} text-right`}>Energy Total MWh</span>
-      </div>
+    // Horizontal scroll on mobile — 5 columns need more width than a phone has.
+    // min-w forces the overflow; released at sm where the section is wide enough.
+    <div className="overflow-x-auto">
+      <div className="min-w-[522px] sm:min-w-0">
 
-      {rows.map((inv) => {
-        const st = INV_STATUS[inv.status] ?? {
-          label: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
-          dot: 'bg-black/30',
-          text: 'text-black/55',
-        }
-        const isOffline = inv.status === 'offline'
-        return (
-          <div key={inv.device_id} className={`${INV_COLS} items-center py-3.5 border-b border-black/[0.06] last:border-0`}>
-            <span className={`text-[13px] font-semibold truncate pr-2 ${isOffline ? 'text-black/45' : 'text-black'}`}>
-              {inv.name}
-            </span>
+        <div className={`${INV_COLS} pb-2 border-b border-black/15`}>
+          <span className={HEAD}>Inverter</span>
+          <span className={HEAD}>Status</span>
+          <span className={`${HEAD} text-right`}>Power kW</span>
+          <span className={`${HEAD} text-right`}>Energy Today kWh</span>
+          <span className={`${HEAD} text-right`}>Energy Total MWh</span>
+        </div>
 
-            {/* dot always; label hidden on mobile to buy column width */}
-            <span className="flex items-center gap-1.5 min-w-0">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
-              <span className={`hidden sm:inline text-[12px] font-semibold truncate ${st.text}`}>{st.label}</span>
-            </span>
+        {rows.map((inv) => {
+          const st = INV_STATUS[inv.status] ?? {
+            label: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
+            dot: 'bg-black/30',
+            text: 'text-black/55',
+          }
+          const isOffline = inv.status === 'offline'
+          return (
+            <div key={inv.device_id} className={`${INV_COLS} items-center py-3.5 border-b border-black/[0.06] last:border-0`}>
+              <span className={`text-[13px] font-semibold truncate pr-2 ${isOffline ? 'text-black/45' : 'text-black'}`}>
+                {inv.name}
+              </span>
 
-            <span className="text-right tabular-nums text-[13px] font-semibold">
-              {isOffline
-                ? <span className="text-black/30">—</span>
-                : <span className="text-black">{(inv.active_power_kw ?? 0).toFixed(1)}</span>}
-            </span>
+              {/* dot only on mobile; label from sm+ */}
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
+                <span className={`hidden sm:inline text-[12px] font-semibold truncate ${st.text}`}>{st.label}</span>
+              </span>
 
-            <span className="text-right tabular-nums text-[13px] font-semibold text-black">
-              {(inv.daily_gen_kwh ?? 0).toLocaleString()}
-            </span>
+              <span className="text-right tabular-nums text-[13px] font-semibold">
+                {isOffline
+                  ? <span className="text-black/30">—</span>
+                  : <span className="text-black">{(inv.active_power_kw ?? 0).toFixed(1)}</span>}
+              </span>
 
-            <span className="text-right tabular-nums text-[13px] font-semibold text-black">
-              {((inv.total_gen_kwh ?? 0) / 1000).toFixed(1)}
-            </span>
-          </div>
-        )
-      })}
+              <span className="text-right tabular-nums text-[13px] font-semibold text-black">
+                {(inv.daily_gen_kwh ?? 0).toLocaleString()}
+              </span>
 
-      <div className={`${INV_COLS} items-baseline pt-2.5`}>
-        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Total output</span>
-        <span className={`text-[13px] font-semibold tabular-nums ${onlineCount === rows.length ? 'text-[#497d00]' : 'text-black'}`}>
-          {onlineCount}/{rows.length}
-        </span>
-        <span className="text-right text-[15px] font-semibold text-black tabular-nums">{powerTotal.toFixed(1)}</span>
-        <span className="text-right text-[15px] font-semibold text-black tabular-nums">{todayTotal.toLocaleString()}</span>
-        <span className="text-right text-[15px] font-semibold text-black tabular-nums">{totalMwh.toFixed(1)}</span>
+              <span className="text-right tabular-nums text-[13px] font-semibold text-black">
+                {((inv.total_gen_kwh ?? 0) / 1000).toFixed(1)}
+              </span>
+            </div>
+          )
+        })}
+
+        <div className={`${INV_COLS} items-baseline pt-2.5`}>
+          <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-black/40">Total output</span>
+          <span className={`text-[13px] font-semibold tabular-nums ${onlineCount === rows.length ? 'text-[#497d00]' : 'text-black'}`}>
+            {onlineCount}/{rows.length}
+          </span>
+          <span className="text-right text-[15px] font-semibold text-black tabular-nums">{powerTotal.toFixed(1)}</span>
+          <span className="text-right text-[15px] font-semibold text-black tabular-nums">{todayTotal.toLocaleString()}</span>
+          <span className="text-right text-[15px] font-semibold text-black tabular-nums">{totalMwh.toFixed(1)}</span>
+        </div>
+
       </div>
     </div>
   )
