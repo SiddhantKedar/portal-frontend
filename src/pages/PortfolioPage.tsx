@@ -203,7 +203,7 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
           </div>
           <p className="mt-1.5 text-[11px] text-black/40 truncate">{showInstaller && site.installer_name ? `${site.installer_name} · ` : ''}{formatLastUpdated(site.last_updated)}</p>
         </div>
-        <div className="grid grid-cols-3 gap-x-4 sm:flex sm:items-center sm:justify-end sm:gap-10 tabular-nums shrink-0">
+        <div className="flex items-center justify-between gap-4 sm:flex sm:items-center sm:justify-end sm:gap-10 tabular-nums shrink-0">
           <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p><p className="text-[17px] sm:text-[16px] font-semibold text-[#e17100] mt-1">{site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span></p></div>
           <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p><p className="text-[17px] sm:text-[16px] font-semibold text-black mt-1">{site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span></p></div>
           <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p><p className="text-[17px] sm:text-[16px] font-semibold mt-1">{hasInverters ? (<><span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span><span className="text-black/40 text-[12px]">/{site.inverters_total}</span></>) : <span className="text-black/30 text-[14px]">—</span>}</p></div>
