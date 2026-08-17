@@ -106,7 +106,7 @@ function todayString() {
 // Device-reported status code → colours. Canonical: 0 Stopped · 1 Running · 2 Standby · 4 Warning · 8 Fault
 const INV_STATE: Record<number, { label: string; dot: string; text: string; hex: string; tint: string }> = {
   0: { label: 'Stopped', dot: 'bg-black/40',  text: 'text-black/60',  hex: '#9ca3af', tint: 'rgba(0,0,0,0.03)' },
-  1: { label: 'Running', dot: 'bg-green-500', text: 'text-green-700', hex: '#22c55e', tint: 'rgba(73,125,0,0.04)' },
+  1: { label: 'Generating', dot: 'bg-green-500', text: 'text-green-700', hex: '#22c55e', tint: 'rgba(73,125,0,0.04)' },
   2: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55',  hex: '#94a3b8', tint: 'rgba(0,0,0,0.03)' },
   4: { label: 'Warning', dot: 'bg-[#e17100]', text: 'text-[#e17100]', hex: '#e17100', tint: 'rgba(225,113,0,0.05)' },
   8: { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600',   hex: '#dc2626', tint: 'rgba(220,38,38,0.04)' },
