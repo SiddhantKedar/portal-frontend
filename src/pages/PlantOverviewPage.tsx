@@ -822,7 +822,7 @@ type InverterRow = PlantOverview['inverters'][number]
 // Canonical: 0 Stopped · 1 Running · 2 Standby · 4 Warning · 8 Fault
 const INV_STATE: Record<number, { label: string; dot: string; text: string }> = {
   0: { label: 'Stopped', dot: 'bg-black/40',  text: 'text-black/60' },
-  1: { label: 'Running', dot: 'bg-green-500', text: 'text-green-700' },
+  1: { label: 'Generating', dot: 'bg-green-500', text: 'text-green-700' },
   2: { label: 'Standby', dot: 'bg-black/30',  text: 'text-black/55' },
   4: { label: 'Warning', dot: 'bg-[#e17100]', text: 'text-[#e17100]' },
   8: { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600' },

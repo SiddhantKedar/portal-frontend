@@ -263,7 +263,7 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
-                      to={`${base}/alerts`}
+                      to={`${base}/faults`}
                       onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >

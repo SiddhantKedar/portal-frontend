@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Zap, TrendingUp, Building2, Cpu, RefreshCw, ChevronRight, Gauge } from 'lucide-react'
+import { Zap, TrendingUp, Cpu, RefreshCw,Building2, ChevronRight, Gauge, Activity } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '@/api/axios'
 import { useAutoRefresh } from '@/api/useAutoRefresh'
@@ -21,12 +21,13 @@ const T = {
 
 interface PortfolioSummary {
   total_active_power_kw: number
-  total_energy_today_kwh: number | null   // null when ?detail=basic
+  total_energy_today_kwh: number | null
   ac_capacity_kw?: number
   sites_online: number
   sites_total: number
   inverters_online: number
   inverters_total: number
+  states: { running: number; stopped: number; standby: number; warning: number; fault: number; other: number }
 }
 
 interface SiteSummary {
@@ -40,6 +41,7 @@ interface SiteSummary {
   meter_online: boolean
   inverters_online: number
   inverters_total: number
+  states: { running: number; stopped: number; standby: number; warning: number; fault: number; other: number }
   last_updated: string | null
 }
 
@@ -61,6 +63,32 @@ function formatLastUpdated(iso: string | null) {
   if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+const STATE_META: Record<string, { label: string; text: string; bg: string }> = {
+  fault:   { label: 'Fault',      text: 'text-[#dc2626]', bg: 'bg-[#dc2626]/[0.08]' },
+  warning: { label: 'Warning',    text: 'text-[#e17100]', bg: 'bg-[#e17100]/[0.08]' },
+  offline: { label: 'Offline',    text: 'text-black/50',  bg: 'bg-black/[0.05]' },
+  running: { label: 'Generating', text: 'text-[#497d00]', bg: 'bg-[#497d00]/[0.08]' },
+  standby: { label: 'Standby',    text: 'text-black/55',  bg: 'bg-black/[0.05]' },
+  stopped: { label: 'Stopped',    text: 'text-black/55',  bg: 'bg-black/[0.05]' },
+  other:   { label: 'Other',      text: 'text-black/55',  bg: 'bg-black/[0.05]' },
+}
+// Device states only (problems first). Offline is NOT here — comms lives in the count.
+const STATE_ORDER = ['fault', 'warning', 'running', 'standby', 'stopped', 'other'] as const
+
+// Ordered, zero-filtered state list for a site (offline folded in from comms).
+function siteStates(site: SiteSummary) {
+  const offline = site.inverters_total - site.inverters_online
+  return [
+    { key: 'fault',   count: site.states.fault },
+    { key: 'warning', count: site.states.warning },
+    { key: 'offline', count: offline },
+    { key: 'running', count: site.states.running },
+    { key: 'standby', count: site.states.standby },
+    { key: 'stopped', count: site.states.stopped },
+    { key: 'other',   count: site.states.other },
+  ].filter((s) => s.count > 0)
 }
 
 // ============================================================
@@ -187,14 +215,15 @@ function FlatSiteList({ sites }: { sites: SiteSummary[] }) {
 // Site Row
 function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInstaller?: boolean }) {
   const navigate = useNavigate()
-  const hasInverters = site.inverters_total > 0
-  const invHealthy = hasInverters && site.inverters_online === site.inverters_total
   const util = site.ac_capacity_kw && site.ac_capacity_kw > 0
     ? Math.min(Math.round((site.active_power_kw / site.ac_capacity_kw) * 100), 100) : null
+  const allOnline = site.inverters_total > 0 && site.inverters_online === site.inverters_total
+  const segs = siteStates(site)
 
   return (
     <button type="button" onClick={() => navigate(`/sites/${site.site_id}/plant`)}
       className="group w-full text-left px-5 py-5 hover:bg-black/[0.02] transition-colors">
+
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
         <div className="min-w-0 sm:flex-1">
           <div className="flex items-center gap-2 min-w-0">
@@ -202,14 +231,29 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
             {!site.meter_online && (<span className="shrink-0 text-[10px] uppercase tracking-[0.08em] font-semibold text-[#dc2626] border border-[#dc2626]/30 bg-[#dc2626]/[0.06] rounded px-1.5 py-0.5">Offline</span>)}
           </div>
           <p className="mt-1.5 text-[11px] text-black/40 truncate">{showInstaller && site.installer_name ? `${site.installer_name} · ` : ''}{formatLastUpdated(site.last_updated)}</p>
+
+          {site.inverters_total > 0 && (
+            <div className="mt-2 flex items-center flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold tabular-nums text-black">
+                <span className={`w-1.5 h-1.5 rounded-full ${allOnline ? 'bg-[#497d00]' : 'bg-[#e17100]'}`} />
+                {site.inverters_online}/{site.inverters_total} online
+              </span>
+              {segs.map((s) => (
+                <span key={s.key} className={`text-[12px] font-semibold px-1.5 py-0.5 rounded ${STATE_META[s.key].text} ${STATE_META[s.key].bg}`}>
+                  {s.count} {STATE_META[s.key].label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
+
         <div className="flex items-center justify-between gap-4 sm:flex sm:items-center sm:justify-end sm:gap-10 tabular-nums shrink-0">
           <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p><p className="text-[17px] sm:text-[16px] font-semibold text-[#e17100] mt-1">{site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span></p></div>
           <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p><p className="text-[17px] sm:text-[16px] font-semibold text-black mt-1">{site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span></p></div>
-          <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Inv</p><p className="text-[17px] sm:text-[16px] font-semibold mt-1">{hasInverters ? (<><span className={invHealthy ? 'text-[#497d00]' : 'text-[#e17100]'}>{site.inverters_online}</span><span className="text-black/40 text-[12px]">/{site.inverters_total}</span></>) : <span className="text-black/30 text-[14px]">—</span>}</p></div>
           <ChevronRight size={18} className="hidden sm:block text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
         </div>
       </div>
+
       {util !== null && (
         <div className="mt-4 flex items-center gap-3">
           <div className="h-1.5 flex-1 bg-black/[0.06] rounded-full overflow-hidden"><div className="h-full rounded-full bg-[#e17100]" style={{ width: `${util}%` }} /></div>
@@ -219,8 +263,6 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
     </button>
   )
 }
-
-
 
 
 // ============================================================
@@ -633,6 +675,28 @@ export default function PortfolioPage() {
                 </span>
                 {fleet && <HealthFooter online={fleet.inverters_online} total={fleet.inverters_total} />}
               </div>
+            </div>
+            <div className="flex items-start justify-between py-3.5 gap-4">
+              <div className="flex items-center gap-2.5 min-w-0 pt-0.5">
+                <Activity size={15} className="text-black/40 shrink-0" strokeWidth={2} />
+                <span className={T.eyebrow}>Inverter Status</span>
+              </div>
+              {fleet && Object.values(fleet.states).some((v) => v > 0) ? (
+                <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1.5 shrink-0">
+                  {STATE_ORDER.map((k) => {
+                    const c = fleet.states[k]
+                    if (c <= 0) return null
+                    return (
+                      <span key={k} className="inline-flex items-baseline gap-1.5">
+                        <span className={`text-[18px] font-semibold tabular-nums leading-none ${STATE_META[k].text}`}>{c}</span>
+                        <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-black/45">{STATE_META[k].label}</span>
+                      </span>
+                    )
+                  })}
+                </div>
+              ) : (
+                <span className="text-[13px] text-black/40">—</span>
+              )}
             </div>
           </div>
         </div>

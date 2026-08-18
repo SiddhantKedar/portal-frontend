@@ -16,6 +16,7 @@ import NotFoundPage from './pages/NotFoundPage'
 import UserPage from './pages/UserPage'
 import EnergyFlowPage from './pages/EnergyFlowPage'
 import ReportsPage from './pages/ReportsPage'
+import FaultsPage from './pages/FaultsPage'
 
 function CenteredMessage({ text, tone = 'muted' }: { text: string; tone?: 'muted' | 'error' }) {
   return (
@@ -103,6 +104,7 @@ export default function App() {
             <Route path="plant" element={<PlantOverviewPage />} />
             <Route path="inverters" element={<InverterOverviewPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="faults" element={<FaultsPage />} />
             <Route element={<DeviceScope />}>
               <Route path="inverters/:deviceId" element={<InverterDetailPage />} />
             </Route>
