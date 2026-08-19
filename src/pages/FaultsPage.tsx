@@ -145,7 +145,6 @@ export default function FaultsPage() {
   }
 
   const ticks = isMobile ? DAY_TICKS_MOBILE : DAY_TICKS
-  const nowMin = data.is_today ? minutesFromIstDayStart(data.window.end, data.date) : null
 
   return (
     <div className="w-full max-w-[1152px] mx-auto px-0 sm:px-6 md:px-6 lg:px-6">
@@ -276,10 +275,6 @@ export default function FaultsPage() {
                       ))}
                     </div>
 
-                    {/* upcoming region (today) — everything past "now" reads as not-yet */}
-                    {nowMin != null && nowMin < 1440 && (
-                      <div className="absolute top-0 bottom-0" style={{ left: `${(nowMin / 1440) * 100}%`, right: 0, background: HATCH, opacity: 0.5 }} />
-                    )}
 
                     {/* segments — full-height bands; faults get min-width + ring + glow + top z */}
                     {inv.timeline.map((s, j) => {
@@ -310,10 +305,6 @@ export default function FaultsPage() {
                       )
                     })}
 
-                    {/* now-line */}
-                    {nowMin != null && nowMin < 1440 && (
-                      <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${(nowMin / 1440) * 100}%`, borderLeft: '1.5px dashed rgba(220,38,38,0.55)' }} />
-                    )}
                   </div>
 
                   {/* tooltip — label + time range only, no computed duration */}

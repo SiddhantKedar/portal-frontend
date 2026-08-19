@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Sun, SunMedium, Clock, Maximize2, Minimize2, RefreshCw, Power, Cpu, TrendingUp, Leaf,
-  AlertTriangle, WifiOff,
+  AlertTriangle, WifiOff, CalendarRange,
 } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
 import {
@@ -42,6 +42,7 @@ interface PlantOverview {
     active_power_kw: number
     energy_today_kwh: number
     energy_active_export_kwh: number
+    energy_month_kwh: number | null
     frequency_hz: number
     reactive_power_kvar: number
     power_factor: number
@@ -1695,7 +1696,7 @@ export default function PlantOverviewPage() {
     
       {/* ============ HERO: Gauge + Energy Rail ============ */}
       <Divider />
-      <section className="pt-10 pb-3">
+      <section className="pt-8 pb-2">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-10 md:gap-12 items-center">
 
@@ -1776,12 +1777,20 @@ export default function PlantOverviewPage() {
                       : '—',
                   unit: 'MWh',
                 },
+                {
+                  label: 'Energy Month',
+                  sub: 'Generated this month',
+                  icon: CalendarRange,
+                  tone: '#e17100',
+                  value: overview?.plant.energy_month_kwh?.toLocaleString() ?? '—',
+                  unit: 'kWh',
+                },
               ].map((m, i, arr) => {
                 const Icon = m.icon
                 return (
                   <div
                     key={m.label}
-                    className={`flex items-center justify-between gap-4 py-5 ${i < arr.length - 1 ? 'border-b border-black/10' : ''}`}
+                    className={`flex items-center justify-between gap-4 py-3.5 ${i < arr.length - 1 ? 'border-b border-black/10' : ''}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
