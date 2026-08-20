@@ -88,7 +88,7 @@ interface PlantOverview {
     status: string
   } | null
   performance: {
-    performance_ratio_pct: number
+    performance_ratio_pct: number | null
     cuf_pct: number
     poa_irradiation_kwh_m2: number
     dc_power_total_kw: number
@@ -365,20 +365,23 @@ function PerformanceZoneCard({
   title, actual, targeted, formatValue,
 }: {
   title: string
-  actual: number
+  actual: number | null
   targeted: number
   formatValue: (n: number) => string
 }) {
-  const max = Math.max(actual, targeted) * 1.2
-  const actualPct = Math.min(100, (actual / max) * 100)
+  const hasData = actual != null
+  const a = actual ?? 0
+  const max = Math.max(a, targeted) * 1.2
+  const actualPct = hasData ? Math.min(100, (a / max) * 100) : 0
   const zone70 = ((targeted * 0.7) / max) * 100
   const zone100 = (targeted / max) * 100
 
   let status: string
   let statusColor: string
-  if (actual >= targeted) { status = 'On target'; statusColor = PERF_COLORS.targeted }
-  else if (actual >= targeted * 0.9) { status = 'Near target'; statusColor = PERF_COLORS.actual }
-  else if (actual >= targeted * 0.7) { status = 'Behind'; statusColor = PERF_COLORS.actual }
+  if (!hasData) { status = 'No data'; statusColor = '#9ca3af' }
+  else if (a >= targeted) { status = 'On target'; statusColor = PERF_COLORS.targeted }
+  else if (a >= targeted * 0.9) { status = 'Near target'; statusColor = PERF_COLORS.actual }
+  else if (a >= targeted * 0.7) { status = 'Behind'; statusColor = PERF_COLORS.actual }
   else { status = 'Well behind'; statusColor = '#dc2626' }
 
   return (
@@ -387,7 +390,7 @@ function PerformanceZoneCard({
       <div className="flex flex-col justify-center h-[90px] md:h-[200px] gap-4">
         <div className="flex items-baseline justify-between">
           <span className="text-[26px] font-semibold text-black tracking-tight tabular-nums leading-none">
-            {formatValue(actual)}
+            {hasData ? formatValue(a) : '—'}
           </span>
           <span className="text-[13px] font-semibold" style={{ color: statusColor }}>
             {status}
@@ -402,7 +405,7 @@ function PerformanceZoneCard({
           </div>
           {/* Actual fill */}
           {/* Actual fill — orange up to target, green for the overshoot beyond target */}
-          {actual >= targeted ? (
+                    {hasData && (a >= targeted ? (
             <>
               <div
                 className="absolute inset-y-0 left-0"
@@ -422,7 +425,7 @@ function PerformanceZoneCard({
               className="absolute inset-y-0 left-0"
               style={{ width: `${actualPct}%`, background: PERF_COLORS.actual }}
             />
-          )}
+          ))}
           {/* Target line at zone boundary */}
           <div className="absolute inset-y-0 w-[2px] bg-black" style={{ left: `calc(${zone100}% - 1px)` }} />
         </div>
@@ -500,7 +503,7 @@ function PerformanceCards({
 }: {
   actualToday: number
   generationTarget: number
-  performanceRatio: number
+  performanceRatio: number | null
   cuf: number
 }) {
   return (
@@ -1767,6 +1770,14 @@ export default function PlantOverviewPage() {
                   unit: 'kg',
                 },
                 {
+                  label: 'Energy Month',
+                  sub: 'Generated this month',
+                  icon: CalendarRange,
+                  tone: '#e17100',
+                  value: overview?.plant.energy_month_kwh?.toLocaleString() ?? '—',
+                  unit: 'kWh',
+                },
+                {
                   label: 'Energy Total',
                   sub: 'Lifetime cumulative export',
                   icon: TrendingUp,
@@ -1777,14 +1788,7 @@ export default function PlantOverviewPage() {
                       : '—',
                   unit: 'MWh',
                 },
-                {
-                  label: 'Energy Month',
-                  sub: 'Generated this month',
-                  icon: CalendarRange,
-                  tone: '#e17100',
-                  value: overview?.plant.energy_month_kwh?.toLocaleString() ?? '—',
-                  unit: 'kWh',
-                },
+                
               ].map((m, i, arr) => {
                 const Icon = m.icon
                 return (
@@ -1956,7 +1960,7 @@ export default function PlantOverviewPage() {
         <PerformanceCards
           actualToday={overview?.plant.energy_today_kwh ?? 0}
           generationTarget={overview?.plant.daily_generation_target_kwh ?? 0}
-          performanceRatio={overview?.performance?.performance_ratio_pct ?? 0}
+          performanceRatio={overview?.performance?.performance_ratio_pct ?? null}
           cuf={overview?.performance?.cuf_pct ?? 0}
         />
       </Section>
