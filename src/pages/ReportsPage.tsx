@@ -26,6 +26,8 @@ const OLIVE = '#497d00'
 interface DailyRow {
   date: string
   energy_kwh: number | null
+  energy_active_export_open_kwh: number | null
+  energy_active_export_kwh: number | null
   inverter_sum_kwh: number | null
   specific_yield_kwh_kwp: number | null
   performance_ratio_pct: number | null
@@ -106,6 +108,8 @@ function istDateTime(iso: string | null | undefined) {
 const CSV_COLUMNS: { header: string; value: (r: DailyRow) => string }[] = [
   { header: 'Date', value: (r) => r.date },
   { header: 'Energy Today (kWh)', value: (r) => raw(r.energy_kwh) },
+  { header: 'Counter Start (MWh)', value: (r) => raw(r.energy_active_export_open_kwh == null ? null : r.energy_active_export_open_kwh / 1000) },
+  { header: 'Counter End (MWh)', value: (r) => raw(r.energy_active_export_kwh == null ? null : r.energy_active_export_kwh / 1000) },
   { header: 'Inverter Energy Today (kWh)', value: (r) => raw(r.inverter_sum_kwh) },
   { header: 'Specific Yield (kWh/kWp)', value: (r) => raw(r.specific_yield_kwh_kwp) },
   { header: 'PR (%)', value: (r) => raw(r.performance_ratio_pct) },
@@ -423,6 +427,8 @@ export default function ReportsPage() {
                 <tr className="border-b border-black/15 bg-black/[0.015]">
                   <Th left sticky>Date</Th>
                   <Th>Energy Today (kWh)</Th>
+                  <Th>Counter Start (MWh)</Th>
+                  <Th>Counter End (MWh)</Th>
                   <Th>Inverter Energy Today (kWh)</Th>
                   <Th>Yield (kWh/kWp)</Th>
                   <Th>PR %</Th>
@@ -440,6 +446,8 @@ export default function ReportsPage() {
                       <span className="text-[13px] font-semibold text-black">{fmtDay(r.date)}</span>
                     </td>
                     <Td>{num(r.energy_kwh, 2)}</Td>
+                    <Td>{num(r.energy_active_export_open_kwh == null ? null : r.energy_active_export_open_kwh / 1000, 2)}</Td>
+                    <Td>{num(r.energy_active_export_kwh == null ? null : r.energy_active_export_kwh / 1000, 2)}</Td>
                     <Td tone="rgba(0,0,0,0.55)">{num(r.inverter_sum_kwh, 0)}</Td>
                     <Td>{num(r.specific_yield_kwh_kwp, 2)}</Td>
                     <Td tone={OLIVE}>{num(r.performance_ratio_pct, 2)}</Td>
