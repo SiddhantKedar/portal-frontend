@@ -114,9 +114,15 @@ const INV_STATE: Record<number, { label: string; dot: string; text: string; hex:
 
 const INV_OFFLINE = { label: 'Offline', dot: 'bg-red-500', text: 'text-red-600', hex: '#dc2626', tint: 'rgba(0,0,0,0.03)' }
 
-// Two axes: offline (unreachable) wins — there's no last-known state to carry.
+// Reachable but no status register yet (site not mapped). Comms fact, not a device state.
+const INV_ONLINE_UNMAPPED = { label: 'Online', dot: 'bg-green-500', text: 'text-green-700', hex: '#22c55e', tint: 'rgba(0,0,0,0.03)' }
+
+// Two axes, kept orthogonal.
 function invStatusMeta(inv: Pick<InverterData, 'status' | 'inverter_status'>) {
-  if (inv.status === 'offline' || inv.inverter_status == null) return INV_OFFLINE
+  // Axis 1 — comms. Unreachable wins: no last-known state to carry.
+  if (inv.status === 'offline') return INV_OFFLINE
+  // Axis 2 — device state. null = reachable, register unmapped → report comms, not false Offline.
+  if (inv.inverter_status == null) return INV_ONLINE_UNMAPPED
   const { code, label } = inv.inverter_status
   return INV_STATE[code] ?? { label: label || `Code ${code}`, dot: 'bg-black/30', text: 'text-black/55', hex: '#94a3b8', tint: 'rgba(0,0,0,0.03)' }
 }
