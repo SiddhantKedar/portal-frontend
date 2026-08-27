@@ -832,11 +832,16 @@ const INV_STATE: Record<number, { label: string; dot: string; text: string }> = 
   8: { label: 'Fault',   dot: 'bg-red-600',   text: 'text-red-600' },
 }
 
-// Resolve a row's status from both axes. Offline (unreachable) wins the dot —
-// there is no last-known device state to carry, so it can't be a false Running.
+// Resolve a row's status from both axes, kept orthogonal.
 function invStatusMeta(inv: InverterRow): { label: string; dot: string; text: string } {
-  if (inv.status === 'offline' || inv.inverter_status == null) {
+  // Axis 1 — comms. Unreachable wins: no device state to carry, can't be a false Running.
+  if (inv.status === 'offline') {
     return { label: 'Offline', dot: 'bg-red-600', text: 'text-red-600' }
+  }
+  // Axis 2 — device-reported state. null = reachable but no status register
+  // (site not yet mapped). Report the comms fact, not a false Offline.
+  if (inv.inverter_status == null) {
+    return { label: 'Online', dot: 'bg-green-500', text: 'text-green-700' }
   }
   const { code, label } = inv.inverter_status
   return INV_STATE[code] ?? { label: label || `Code ${code}`, dot: 'bg-black/30', text: 'text-black/55' }
