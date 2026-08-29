@@ -37,6 +37,9 @@ const TEMP_GRADIENT =
 interface PlantOverview {
   site: string
   customer: string
+  capabilities: {
+    weather: boolean
+  }
   last_updated: string
   plant: {
     active_power_kw: number
@@ -499,15 +502,20 @@ function ElectricalTrendTooltip({ active, payload }: any) {
 }
 
 function PerformanceCards({
-  actualToday, generationTarget, performanceRatio, cuf,
+  actualToday, generationTarget, performanceRatio, cuf, showPerformanceRatio,
 }: {
   actualToday: number
   generationTarget: number
   performanceRatio: number | null
   cuf: number
+  showPerformanceRatio: boolean
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-0 lg:divide-x lg:divide-black/15">
+    <div
+      className={`grid grid-cols-1 gap-8 lg:gap-0 lg:divide-x lg:divide-black/15 ${
+        showPerformanceRatio ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+      }`}
+    >
       <div className="lg:pr-8 min-w-0">
         <PerformanceZoneCard
           title="Generation"
@@ -516,14 +524,16 @@ function PerformanceCards({
           formatValue={(n) => `${n.toLocaleString()}\u00A0kWh`}
         />
       </div>
-      <div className="lg:px-8 min-w-0">
-        <PerformanceZoneCard
-          title="Performance Ratio"
-          actual={performanceRatio}
-          targeted={79.4}
-          formatValue={(n) => `${n.toFixed(1)}%`}
-        />
-      </div>
+      {showPerformanceRatio && (
+        <div className="lg:px-8 min-w-0">
+          <PerformanceZoneCard
+            title="Performance Ratio"
+            actual={performanceRatio}
+            targeted={79.4}
+            formatValue={(n) => `${n.toFixed(1)}%`}
+          />
+        </div>
+      )}
       <div className="lg:pl-8 min-w-0">
         <PerformanceZoneCard
           title="Capacity Utilisation Factor"
@@ -1425,6 +1435,11 @@ export default function PlantOverviewPage() {
   const weatherOffline = overview?.weather?.status === 'offline'
   const weatherIntensity = irradianceIntensity(overview?.weather?.irradiation_inclined_wm2 ?? 0, weatherOffline)
 
+  // Weather-station capability gate. Hides POA Today (energy rail) and the
+  // Performance Ratio card when the site has no weather station.
+  // Absent/undefined capabilities → treated as capable (backward-safe).
+  const weatherCapable = overview?.capabilities?.weather !== false
+
   function toggleElec(group: string) {
     setElecHidden((prev) => {
       const next = new Set(prev)
@@ -1748,7 +1763,7 @@ export default function PlantOverviewPage() {
             {/* Energy rail — each metric now gets an icon, and a small descriptive
                 subtext to add substance beyond just a number */}
               {/* Energy rail — Energy Today · POA Today · CO₂ Avoided · Energy Total */}
-            <div className="flex flex-col">
+            <div className="flex flex-col self-stretch">
               {[
                 {
                   label: 'Energy Today',
@@ -1758,14 +1773,14 @@ export default function PlantOverviewPage() {
                   value: overview?.plant.energy_today_kwh?.toLocaleString() ?? '—',
                   unit: 'kWh',
                 },
-                {
+                ...(weatherCapable ? [{
                   label: 'POA Today',
                   sub: 'Plane-of-array irradiation',
                   icon: SunMedium,
                   tone: '#497d00',
                   value: overview?.performance?.poa_irradiation_kwh_m2?.toFixed(2) ?? '—',
                   unit: 'kWh/m²',
-                },
+                }] : []),
                 {
                   label: 'CO₂ Avoided Today',
                   sub: 'Equivalent emissions offset',
@@ -1799,7 +1814,7 @@ export default function PlantOverviewPage() {
                 return (
                   <div
                     key={m.label}
-                    className={`flex items-center justify-between gap-4 py-3.5 ${i < arr.length - 1 ? 'border-b border-black/10' : ''}`}
+                    className={`flex flex-1 items-center justify-between gap-4 py-3.5 ${i < arr.length - 1 ? 'border-b border-black/10' : ''}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
@@ -1967,6 +1982,7 @@ export default function PlantOverviewPage() {
           generationTarget={overview?.plant.daily_generation_target_kwh ?? 0}
           performanceRatio={overview?.performance?.performance_ratio_pct ?? null}
           cuf={overview?.performance?.cuf_pct ?? 0}
+          showPerformanceRatio={weatherCapable}
         />
       </Section>
 
