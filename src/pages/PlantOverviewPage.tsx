@@ -39,6 +39,7 @@ interface PlantOverview {
   customer: string
   capabilities: {
     weather: boolean
+    transformer: boolean
   }
   last_updated: string
   plant: {
@@ -52,6 +53,7 @@ interface PlantOverview {
     ac_capacity_kw: number
     dc_capacity_kw: number
     daily_generation_target_kwh: number | null
+    target_cuf_pct: number | null
   }
   grid: {
     voltage_ab: number
@@ -90,9 +92,15 @@ interface PlantOverview {
     module_temp_c: number
     status: string
   } | null
+  transformer: {
+    transformer_oil_temp_c: number
+    transformer_winding_temp_c: number
+    status: string
+    last_updated: string
+  } | null
   performance: {
     performance_ratio_pct: number | null
-    cuf_pct: number
+    cuf_pct: number | null
     poa_irradiation_kwh_m2: number
     dc_power_total_kw: number
     co2_avoided_today_kg: number
@@ -369,22 +377,25 @@ function PerformanceZoneCard({
 }: {
   title: string
   actual: number | null
-  targeted: number
+  targeted: number | null
   formatValue: (n: number) => string
 }) {
   const hasData = actual != null
+  const hasTarget = targeted != null
   const a = actual ?? 0
-  const max = Math.max(a, targeted) * 1.2
+  const t = targeted ?? 0
+  const max = Math.max(a, t) * 1.2 || 1
   const actualPct = hasData ? Math.min(100, (a / max) * 100) : 0
-  const zone70 = ((targeted * 0.7) / max) * 100
-  const zone100 = (targeted / max) * 100
+  const zone70 = hasTarget ? ((t * 0.7) / max) * 100 : 0
+  const zone100 = hasTarget ? (t / max) * 100 : 0
 
   let status: string
   let statusColor: string
   if (!hasData) { status = 'No data'; statusColor = '#9ca3af' }
-  else if (a >= targeted) { status = 'On target'; statusColor = PERF_COLORS.targeted }
-  else if (a >= targeted * 0.9) { status = 'Near target'; statusColor = PERF_COLORS.actual }
-  else if (a >= targeted * 0.7) { status = 'Behind'; statusColor = PERF_COLORS.actual }
+  else if (!hasTarget) { status = 'No target'; statusColor = '#9ca3af' }
+  else if (a >= t) { status = 'On target'; statusColor = PERF_COLORS.targeted }
+  else if (a >= t * 0.9) { status = 'Near target'; statusColor = PERF_COLORS.actual }
+  else if (a >= t * 0.7) { status = 'Behind'; statusColor = PERF_COLORS.actual }
   else { status = 'Well behind'; statusColor = '#dc2626' }
 
   return (
@@ -400,15 +411,18 @@ function PerformanceZoneCard({
           </span>
         </div>
         <div className="relative h-6 rounded-md overflow-hidden">
-          {/* Zones background */}
-          <div className="absolute inset-0 flex">
-            <div style={{ width: `${zone70}%`, background: 'rgba(220,38,38,0.09)' }} />
-            <div style={{ width: `${zone100 - zone70}%`, background: 'rgba(225,113,0,0.10)' }} />
-            <div style={{ width: `${100 - zone100}%`, background: 'rgba(73,125,0,0.10)' }} />
-          </div>
-          {/* Actual fill */}
-          {/* Actual fill — orange up to target, green for the overshoot beyond target */}
-                    {hasData && (a >= targeted ? (
+          {/* Zones background — only meaningful when a target exists */}
+          {hasTarget ? (
+            <div className="absolute inset-0 flex">
+              <div style={{ width: `${zone70}%`, background: 'rgba(220,38,38,0.09)' }} />
+              <div style={{ width: `${zone100 - zone70}%`, background: 'rgba(225,113,0,0.10)' }} />
+              <div style={{ width: `${100 - zone100}%`, background: 'rgba(73,125,0,0.10)' }} />
+            </div>
+          ) : (
+            <div className="absolute inset-0 bg-black/[0.05]" />
+          )}
+          {/* Actual fill — only when there's both data and a target to scale against */}
+          {hasData && hasTarget && (a >= t ? (
             <>
               <div
                 className="absolute inset-y-0 left-0"
@@ -429,11 +443,13 @@ function PerformanceZoneCard({
               style={{ width: `${actualPct}%`, background: PERF_COLORS.actual }}
             />
           ))}
-          {/* Target line at zone boundary */}
-          <div className="absolute inset-y-0 w-[2px] bg-black" style={{ left: `calc(${zone100}% - 1px)` }} />
+          {/* Target line — only when a target exists */}
+          {hasTarget && (
+            <div className="absolute inset-y-0 w-[2px] bg-black" style={{ left: `calc(${zone100}% - 1px)` }} />
+          )}
         </div>
         <div className="flex items-center justify-end text-[11px] text-black/50 font-medium">
-          <span>Target · {formatValue(targeted)}</span>
+          <span>{hasTarget ? `Target · ${formatValue(t)}` : 'No target set'}</span>
         </div>
       </div>
     </div>
@@ -502,12 +518,13 @@ function ElectricalTrendTooltip({ active, payload }: any) {
 }
 
 function PerformanceCards({
-  actualToday, generationTarget, performanceRatio, cuf, showPerformanceRatio,
+  actualToday, generationTarget, performanceRatio, cuf, cufTarget, showPerformanceRatio,
 }: {
   actualToday: number
   generationTarget: number
   performanceRatio: number | null
-  cuf: number
+  cuf: number | null
+  cufTarget: number | null
   showPerformanceRatio: boolean
 }) {
   return (
@@ -538,7 +555,7 @@ function PerformanceCards({
         <PerformanceZoneCard
           title="Capacity Utilisation Factor"
           actual={cuf}
-          targeted={21.9}
+          targeted={cufTarget}
           formatValue={(n) => `${n.toFixed(1)}%`}
         />
       </div>
@@ -1439,6 +1456,8 @@ export default function PlantOverviewPage() {
   // Performance Ratio card when the site has no weather station.
   // Absent/undefined capabilities → treated as capable (backward-safe).
   const weatherCapable = overview?.capabilities?.weather !== false
+  const transformerCapable = overview?.capabilities?.transformer === true
+  const transformerOffline = overview?.transformer?.status === 'offline'
 
   function toggleElec(group: string) {
     setElecHidden((prev) => {
@@ -1972,6 +1991,60 @@ export default function PlantOverviewPage() {
         <InverterLedger inverters={overview?.inverters ?? []} />
       </Section>
 
+      {/* ============ TRANSFORMER ============ */}
+      {transformerCapable && (
+        <>
+          <Divider />
+          <Section>
+            <SectionHeader
+              title="Transformer"
+              meta="Oil & winding temperature"
+              accent="olive"
+              status={{ label: transformerOffline ? 'Offline' : 'Live', online: !transformerOffline }}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+              {[
+                {
+                  label: 'Oil Temperature',
+                  value: overview?.transformer?.transformer_oil_temp_c ?? null,
+                  tone: 'text-black',
+                },
+                {
+                  label: 'Winding Temperature',
+                  value: overview?.transformer?.transformer_winding_temp_c ?? null,
+                  tone: 'text-[#e17100]',
+                },
+              ].map((m) => {
+                const pct = m.value != null ? Math.min(100, Math.max(0, (m.value / 120) * 100)) : 0
+                return (
+                  <div key={m.label} className="min-w-0">
+                    <p className={T.eyebrow}>{m.label}</p>
+                    <div className="flex items-baseline gap-2 mt-2 mb-3">
+                      <span className={`${T.metricXL} ${m.tone}`}>
+                        {m.value != null ? m.value.toFixed(1) : '—'}
+                      </span>
+                      <span className={T.unit}>°C</span>
+                    </div>
+                    <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, background: TEMP_GRADIENT }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1.5 text-[11px] text-black/50 tabular-nums">
+                      <span>0</span>
+                      <span>60</span>
+                      <span>120°C</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Section>
+        </>
+      )}
+
 
       {/* ============ PERFORMANCE (GenerationCards) ============ */}
       <Divider />
@@ -1981,7 +2054,8 @@ export default function PlantOverviewPage() {
           actualToday={overview?.plant.energy_today_kwh ?? 0}
           generationTarget={overview?.plant.daily_generation_target_kwh ?? 0}
           performanceRatio={overview?.performance?.performance_ratio_pct ?? null}
-          cuf={overview?.performance?.cuf_pct ?? 0}
+          cuf={overview?.performance?.cuf_pct ?? null}
+          cufTarget={overview?.plant.target_cuf_pct ?? null}
           showPerformanceRatio={weatherCapable}
         />
       </Section>
