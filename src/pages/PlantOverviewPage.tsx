@@ -2003,39 +2003,41 @@ export default function PlantOverviewPage() {
               status={{ label: transformerOffline ? 'Offline' : 'Live', online: !transformerOffline }}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pb-3">
               {[
-                {
-                  label: 'Oil Temperature',
-                  value: overview?.transformer?.transformer_oil_temp_c ?? null,
-                  tone: 'text-black',
-                },
-                {
-                  label: 'Winding Temperature',
-                  value: overview?.transformer?.transformer_winding_temp_c ?? null,
-                  tone: 'text-[#e17100]',
-                },
+                { label: 'Oil Temperature', value: overview?.transformer?.transformer_oil_temp_c ?? null },
+                { label: 'Winding Temperature', value: overview?.transformer?.transformer_winding_temp_c ?? null },
               ].map((m) => {
-                const pct = m.value != null ? Math.min(100, Math.max(0, (m.value / 120) * 100)) : 0
+                const v = m.value
+                const pct = v != null ? Math.min(100, Math.max(0, v)) : 0
+                const barColor =
+                  v == null ? 'transparent'
+                  : v > 70 ? '#dc2626'
+                  : v > 55 ? '#e17100'
+                  : '#497d00'
+                const textColor =
+                  v != null && v > 70 ? '#dc2626'
+                  : v != null && v > 55 ? '#e17100'
+                  : '#000'
                 return (
                   <div key={m.label} className="min-w-0">
                     <p className={T.eyebrow}>{m.label}</p>
                     <div className="flex items-baseline gap-2 mt-2 mb-3">
-                      <span className={`${T.metricXL} ${m.tone}`}>
-                        {m.value != null ? m.value.toFixed(1) : '—'}
+                      <span className={T.metricL} style={{ color: textColor }}>
+                        {v != null ? v.toFixed(1) : '—'}
                       </span>
                       <span className={T.unit}>°C</span>
                     </div>
                     <div className="h-2 bg-black/5 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${pct}%`, background: TEMP_GRADIENT }}
+                        style={{ width: `${pct}%`, background: barColor }}
                       />
                     </div>
                     <div className="flex justify-between mt-1.5 text-[11px] text-black/50 tabular-nums">
                       <span>0</span>
-                      <span>60</span>
-                      <span>120°C</span>
+                      <span>50</span>
+                      <span>100°C</span>
                     </div>
                   </div>
                 )
