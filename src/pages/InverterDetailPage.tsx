@@ -38,6 +38,9 @@ const T = {
 
 interface InverterDetail {
   site: string
+  capabilities: {
+    weather: boolean
+  }
   device_id: string
   name: string
   ac_active_power_kw: number
@@ -45,7 +48,7 @@ interface InverterDetail {
   energy_total_kwh: number
   ac_power_factor: number
   inverter_efficiency_pct: number
-  performance_ratio_pct: number
+  performance_ratio_pct: number | null
   grid_frequency_hz: number
   ac_reactive_power_kvar: number
   internal_temp_c: number
@@ -623,8 +626,9 @@ export default function InverterDetailPage() {
     energy: { label: 'Energy (kWh)', color: '#e17100' },
   }
 
-  const pr = detail?.performance_ratio_pct ?? 0
-  const prToneVal = prTone(pr)
+  const weatherCapable = detail?.capabilities?.weather !== false
+  const pr = detail?.performance_ratio_pct ?? null
+  const prToneVal = pr != null ? prTone(pr) : null
 
   return (
     <div className="w-full max-w-[1152px] mx-auto px-0 sm:px-6 md:px-6 lg:px-6 pb-10">
@@ -682,13 +686,20 @@ export default function InverterDetailPage() {
 
             {/* KPI grid — PR now sits here as a plain colored number */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-6">
-              <KpiMetric
-                label="Performance Ratio"
-                value={pr.toFixed(1)}
-                unit="%"
-                icon={Gauge}
-                tone={prToneVal.text.includes('497d00') ? 'olive' : prToneVal.text.includes('dc2626') ? 'red' : 'orange'}
-              />
+              {weatherCapable && (
+                <KpiMetric
+                  label="Performance Ratio"
+                  value={pr != null ? pr.toFixed(1) : '—'}
+                  unit="%"
+                  icon={Gauge}
+                  tone={
+                    prToneVal == null ? 'orange'
+                    : prToneVal.text.includes('497d00') ? 'olive'
+                    : prToneVal.text.includes('dc2626') ? 'red'
+                    : 'orange'
+                  }
+                />
+              )}
               <KpiMetric
                 label="Energy Today"
                 value={detail?.energy_daily_kwh?.toLocaleString() ?? '—'}

@@ -44,6 +44,9 @@ interface InverterData {
 
 interface InverterOverview {
   site: string
+  capabilities: {
+    weather: boolean
+  }
   summary: {
     total_ac_active_power_kw: number
     total_energy_daily_kwh: number
@@ -59,6 +62,8 @@ interface InverterOverview {
     }
     performance_ratio_pct: number
     poa_irradiation_kwh_m2: number
+    dc_capacity_kw: number | null
+    ac_capacity_kw: number | null
   }
   inverters: InverterData[]
 }
@@ -382,7 +387,7 @@ function PowerTrendCard({
   )
 }
 
-function InverterSnapshotCard({ inv }: { inv: InverterData }) {
+function InverterSnapshotCard({ inv, weatherCapable }: { inv: InverterData; weatherCapable: boolean }) {
   const online = inv.status === 'online'
   const st = invStatusMeta(inv)
 
@@ -422,8 +427,12 @@ function InverterSnapshotCard({ inv }: { inv: InverterData }) {
 
       <p className="text-[12px] text-black/55">
         Eff {inv.inverter_efficiency_pct != null ? `${inv.inverter_efficiency_pct.toFixed(1)}%` : '—'}
-        <span className="mx-1.5 text-black/25">·</span>
-        PR {inv.performance_ratio_pct != null ? `${inv.performance_ratio_pct.toFixed(1)}%` : '—'}
+        {weatherCapable && (
+          <>
+            <span className="mx-1.5 text-black/25">·</span>
+            PR {inv.performance_ratio_pct != null ? `${inv.performance_ratio_pct.toFixed(1)}%` : '—'}
+          </>
+        )}
         <span className="mx-1.5 text-black/25">·</span>
         {inv.last_updated ? formatLastUpdated(inv.last_updated) : '—'}
       </p>
@@ -444,12 +453,12 @@ const STATE_ORDER: { key: keyof InverterOverview['summary']['states']; label: st
 // ============================================================
 // Editorial inverters table — PR + efficiency both shown as distinct columns
 // ============================================================
-function InvertersTable({ inverters }: { inverters: InverterData[] }) {
+function InvertersTable({ inverters, weatherCapable }: { inverters: InverterData[]; weatherCapable: boolean }) {
   return (
     <div>
       <SectionHeader
         title="Inverters"
-        meta="Live data, efficiency & performance ratio per inverter"
+        meta={weatherCapable ? 'Live data, efficiency & performance ratio per inverter' : 'Live data & efficiency per inverter'}
         accent="orange"
       />
       <div className="overflow-x-auto -mx-1 px-1">
@@ -477,9 +486,11 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
               <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
                 Efficiency
               </th>
-              <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
-                Perf. Ratio
-              </th>
+              {weatherCapable && (
+                <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
+                  Perf. Ratio
+                </th>
+              )}
               <th className="text-right text-[11px] uppercase tracking-[0.1em] text-black font-semibold px-3 py-2.5 whitespace-nowrap">
                 Power Factor
               </th>
@@ -516,9 +527,11 @@ function InvertersTable({ inverters }: { inverters: InverterData[] }) {
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
                     {inv.inverter_efficiency_pct != null ? `${inv.inverter_efficiency_pct.toFixed(1)}%` : '—'}
                   </td>
-                  <td className="py-3 px-3 text-right font-semibold tabular-nums text-black">
-                    {inv.performance_ratio_pct != null ? `${inv.performance_ratio_pct.toFixed(1)}%` : '—'}
-                  </td>
+                  {weatherCapable && (
+                    <td className="py-3 px-3 text-right font-semibold tabular-nums text-black">
+                      {inv.performance_ratio_pct != null ? `${inv.performance_ratio_pct.toFixed(1)}%` : '—'}
+                    </td>
+                  )}
                   <td className="py-3 px-3 text-right text-black font-medium tabular-nums">
                     {inv.ac_power_factor?.toFixed(2) ?? '—'}
                   </td>
@@ -659,7 +672,14 @@ export default function InverterOverviewPage() {
     .sort()
     .at(-1)
 
-  const overallPR = overview?.summary.performance_ratio_pct ?? 0
+  const acCapacity = overview?.summary.ac_capacity_kw ?? null
+  const acPower = overview?.summary.total_ac_active_power_kw ?? null
+  const capUtilPct =
+    acCapacity != null && acCapacity > 0 && acPower != null
+      ? (acPower / acCapacity) * 100
+      : null
+
+  const weatherCapable = overview?.capabilities?.weather !== false
 
   const anyState = overview ? Object.values(overview.summary.states).some((v) => v > 0) : false
 
@@ -729,19 +749,25 @@ export default function InverterOverviewPage() {
               </div>
 
               {/* Overall PR as the hero's progress bar — colored via prTone */}
+                           {/* Capacity utilisation — current AC output vs AC nameplate */}
               <div className="mt-5">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-black/50 font-medium">Overall performance ratio</span>
-                  <span className={`text-[12px] font-semibold tabular-nums`}>{overallPR.toFixed(1)}%</span>
+                  <span className="text-[11px] text-black/50 font-medium">AC capacity utilised</span>
+                  <span className="text-[12px] font-semibold tabular-nums">
+                    {capUtilPct != null ? `${capUtilPct.toFixed(1)}%` : '—'}
+                  </span>
                 </div>
                 <div className="h-1.5 bg-black/[0.06] rounded-full overflow-hidden">
                   <div
-  className="h-full rounded-full"
-  style={{ width: `${Math.min(100, Math.max(0, overallPR))}%`, background: '#e17100' }}
-/>
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${Math.min(100, Math.max(0, capUtilPct ?? 0))}%`, background: '#e17100' }}
+                  />
                 </div>
                 <p className="text-[11px] text-black/40 mt-1.5 tabular-nums">
-                  Target ≥ 78% · {overview?.summary.online_count ?? 0} inverters live
+                  {acCapacity != null
+                    ? `${acPower?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'} / ${acCapacity.toLocaleString()} kW AC`
+                    : 'AC capacity not set'}
+                  {' · '}{overview?.summary.online_count ?? 0} inverters live
                 </p>
               </div>
             </div>
@@ -794,16 +820,18 @@ export default function InverterOverviewPage() {
         )}
       </div>
 
-      <div className="flex items-center justify-between py-3.5 gap-4">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <Sun size={15} className="text-black/40 shrink-0" strokeWidth={2} />
-          <span className={T.eyebrow}>POA Irradiation</span>
+      {weatherCapable && (
+        <div className="flex items-center justify-between py-3.5 gap-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Sun size={15} className="text-black/40 shrink-0" strokeWidth={2} />
+            <span className={T.eyebrow}>POA Irradiation</span>
+          </div>
+          <span className={`${T.metricL} shrink-0`}>
+            {overview?.summary.poa_irradiation_kwh_m2?.toFixed(2) ?? '—'}
+            <span className={`${T.unit} ml-1`}>kWh/m²</span>
+          </span>
         </div>
-        <span className={`${T.metricL} shrink-0`}>
-          {overview?.summary.poa_irradiation_kwh_m2?.toFixed(2) ?? '—'}
-          <span className={`${T.unit} ml-1`}>kWh/m²</span>
-        </span>
-      </div>
+      )}
     </div>
   </div>
 </section>
@@ -815,7 +843,7 @@ export default function InverterOverviewPage() {
           <Section>
             <SectionHeader
               title="Live Snapshot"
-              meta={`${todayString()} · Performance ratio per inverter`}
+              meta={weatherCapable ? `${todayString()} · Performance ratio per inverter` : todayString()}
               accent="olive"
             />
             <div
@@ -823,7 +851,7 @@ export default function InverterOverviewPage() {
               style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
             >
               {overview?.inverters.map((inv) => (
-                <InverterSnapshotCard key={inv.device_id} inv={inv} />
+              <InverterSnapshotCard key={inv.device_id} inv={inv} weatherCapable={weatherCapable} />
               ))}
             </div>
           </Section>
@@ -833,7 +861,7 @@ export default function InverterOverviewPage() {
       {/* ============ INVERTERS TABLE ============ */}
       <Divider />
       <Section>
-        <InvertersTable inverters={overview?.inverters ?? []} />
+        <InvertersTable inverters={overview?.inverters ?? []} weatherCapable={weatherCapable} />
       </Section>
 
       {/* ============ POWER TREND ============ */}

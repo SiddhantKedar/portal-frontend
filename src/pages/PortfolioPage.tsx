@@ -378,7 +378,7 @@ export default function PortfolioPage() {
                 {fleet?.ac_capacity_kw ? (
                   <div className="mt-5">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] text-black/50 font-medium">Fleet utilisation</span>
+                      <span className="text-[11px] text-black/50 font-medium">Capacity utilisation</span>
                       <span className="text-[12px] font-semibold text-[#e17100] tabular-nums">{fleetUtil}%</span>
                     </div>
                     <div className="h-2 bg-black/[0.06] rounded-full overflow-hidden">
