@@ -42,6 +42,10 @@ interface PlantOverview {
     transformer: boolean
   }
   last_updated: string
+  data_logger: {
+    status: string
+    last_seen: string | null
+  } | null
   plant: {
     active_power_kw: number
     energy_today_kwh: number
@@ -332,18 +336,20 @@ function StatusChip({
   )
 }
 
-// Live-data indicator: green dot + label when fresh, red "Offline" when stale.
-// Uses a 30s local ticker so the badge flips to Offline even if no new fetch lands
-// (e.g. tab was idle, or the API stopped responding).
-function LiveDataIndicator({ lastUpdated }: { lastUpdated: string | null | undefined }) {
+
+function LiveDataIndicator({ status, lastSeen }: { status: string | null | undefined; lastSeen: string | null | undefined }) {
   const [, setTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 30_000)
     return () => clearInterval(id)
   }, [])
 
-  const STALE_MS = 5 * 60 * 1000
-  const isLive = !!lastUpdated && (Date.now() - new Date(lastUpdated).getTime()) < STALE_MS
+  // Plant liveness follows the data logger. Trust the backend status, but still
+  // guard on last_seen so a frozen tab (logger died, no new fetch landed)
+  // self-flips to Offline instead of showing a stale "Live".
+  const STALE_MS = 15 * 60 * 1000
+  const fresh = !!lastSeen && (Date.now() - new Date(lastSeen).getTime()) < STALE_MS
+  const isLive = status === 'online' && fresh
 
   return (
     <span className="inline-flex items-center gap-1.5 shrink-0">
@@ -1689,10 +1695,10 @@ export default function PlantOverviewPage() {
         <div className="order-1 sm:order-2 flex items-center justify-between sm:flex-col sm:items-end gap-3 sm:gap-2 shrink-0">
           <p className={`${T.meta} flex items-center gap-1.5 whitespace-nowrap order-2 sm:order-2`}>
             <Clock size={13} strokeWidth={2} />
-            {overview?.last_updated ? (
+            {overview?.data_logger?.status === 'online' ? (
                 <>
                 <span className="hidden sm:inline">Updated&nbsp;</span>
-                {formatLastUpdated(overview.last_updated)}
+                {formatLastUpdated(overview.data_logger.last_seen ?? overview.last_updated)}
                 </>
             ) : (
                 <span className="text-red-600 font-semibold">OFFLINE</span>
@@ -1716,7 +1722,7 @@ export default function PlantOverviewPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 <p className={T.eyebrow}>Plant Overview</p>
-                <LiveDataIndicator lastUpdated={overview?.last_updated} />
+                <LiveDataIndicator status={overview?.data_logger?.status} lastSeen={overview?.data_logger?.last_seen} />
               </div>
               <h1 className={`${T.siteH1} mt-2 break-words`}>{overview?.site ?? '—'}</h1>
               
@@ -1751,7 +1757,7 @@ export default function PlantOverviewPage() {
                   capacity={overview?.plant.ac_capacity_kw ?? 1}
                 />
                 <div className="flex items-center gap-1.5 mt-4">
-                  <span className={`w-1.5 h-1.5 rounded-full ${overview?.last_updated ? 'bg-green-500 animate-pulse' : 'bg-black/30'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${overview?.data_logger?.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-black/30'}`} />
                   <span className={T.meta}>
                     <span className="tabular-nums font-semibold text-black">{capacityPct}%</span>
                     {' '}of {overview?.plant.ac_capacity_kw?.toLocaleString() ?? '—'} kW AC

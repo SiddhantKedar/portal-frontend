@@ -27,6 +27,8 @@ interface PortfolioSummary {
   sites_total: number
   inverters_online: number
   inverters_total: number
+  loggers_online?: number
+  loggers_total?: number
   states: { running: number; stopped: number; standby: number; warning: number; fault: number; other: number }
 }
 
@@ -38,7 +40,9 @@ interface SiteSummary {
   energy_today_kwh: number | null
   dc_capacity_kw: number | null
   ac_capacity_kw: number | null
-  meter_online: boolean
+    meter_online: boolean
+  logger_online: boolean
+  logger_last_seen: string | null
   inverters_online: number
   inverters_total: number
   states: { running: number; stopped: number; standby: number; warning: number; fault: number; other: number }
@@ -76,6 +80,8 @@ const STATE_META: Record<string, { label: string; text: string; bg: string }> = 
 }
 // Device states only (problems first). Offline is NOT here — comms lives in the count.
 const STATE_ORDER = ['fault', 'warning', 'running', 'standby', 'stopped', 'other'] as const
+
+const RED_CHIP = 'shrink-0 text-[10px] uppercase tracking-[0.08em] font-semibold text-[#dc2626] border border-[#dc2626]/30 bg-[#dc2626]/[0.06] rounded px-1.5 py-0.5'
 
 // Ordered, zero-filtered state list for a site (offline folded in from comms).
 function siteStates(site: SiteSummary) {
@@ -160,8 +166,8 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
   const totalEnergy = hasEnergy
     ? customer.sites.reduce((sum, s) => sum + (s.energy_today_kwh ?? 0), 0)
     : null
-  const sitesOnline = customer.sites.filter((s) => s.meter_online).length
-  const allMetered = sitesOnline === customer.sites.length
+  const sitesOnline = customer.sites.filter((s) => s.logger_online).length
+  const allOnline = sitesOnline === customer.sites.length
 
   return (
     <div className="rounded-2xl border border-black/15 overflow-hidden">
@@ -185,8 +191,8 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
           </span>
           <span className="w-px h-4 bg-black/15" />
           <span className="inline-flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${allMetered ? 'bg-green-500' : 'bg-[#e17100]'}`} />
-            <span className={allMetered ? 'text-green-700' : 'text-[#e17100]'}>
+            <span className={`w-1.5 h-1.5 rounded-full ${allOnline ? 'bg-green-500' : 'bg-[#e17100]'}`} />
+            <span className={allOnline ? 'text-green-700' : 'text-[#e17100]'}>
               {sitesOnline}/{customer.sites.length}
             </span>
           </span>
@@ -228,7 +234,8 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
         <div className="min-w-0 sm:flex-1">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-[15px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">{site.site_name}</p>
-            {!site.meter_online && (<span className="shrink-0 text-[10px] uppercase tracking-[0.08em] font-semibold text-[#dc2626] border border-[#dc2626]/30 bg-[#dc2626]/[0.06] rounded px-1.5 py-0.5">Offline</span>)}
+            {!site.logger_online && (<span className={RED_CHIP}>Offline</span>)}
+            {!site.meter_online && (<span className={RED_CHIP}>Grid offline</span>)}
           </div>
           <p className="mt-1.5 text-[11px] text-black/40 truncate">{showInstaller && site.installer_name ? `${site.installer_name} · ` : ''}{formatLastUpdated(site.last_updated)}</p>
 
