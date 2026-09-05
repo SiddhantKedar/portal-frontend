@@ -41,7 +41,7 @@ interface ScbData {
 // your site's expected current range differs.
 type StringStatus = 'active' | 'low' | 'inactive'
 function stringStatus(current: number): StringStatus {
-  if (current <= 0.05) return 'inactive'
+  if (current <= 0.5) return 'inactive'
   if (current < 2) return 'low'
   return 'active'
 }
