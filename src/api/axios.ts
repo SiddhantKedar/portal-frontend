@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+import { applyDemoMask } from '@/api/demoMask'
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
 })
@@ -31,7 +33,7 @@ function redirectToLogin() {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => applyDemoMask(response),
   async (error) => {
     const originalRequest = error.config
 
