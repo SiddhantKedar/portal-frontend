@@ -25,7 +25,7 @@ export interface DemoSiteMask {
 export const DEMO_SITES: DemoSiteMask[] = [
   { siteId: 5,  siteName: 'Demo Site 1', customerId: -1, customerName: 'Dummy Customer A' },
   { siteId: 6, siteName: 'Demo Site 2', customerId: -1, customerName: 'Dummy Customer A' },
-  { siteId: 3,  siteName: 'Demo Site 1', customerId: -2, customerName: 'Dummy Customer B' },
+  { siteId: 4,  siteName: 'Demo Site 1', customerId: -2, customerName: 'Dummy Customer B' },
 ]
 
 // Portfolio header scope label (installer name would otherwise show here).
