@@ -30,6 +30,28 @@ interface FaultTimeline {
   window: { start: string; end: string }
   gap_threshold_seconds: number
   inverters: FaultInverter[]
+  annunciator: boolean
+  annunciator_data: AnnunciatorData | null
+}
+
+interface AnnunciatorEvent {
+  field: string
+  label: string
+  start: string
+  end: string
+  duration_seconds: number
+  ongoing: boolean
+}
+interface AnnunciatorDevice {
+  device_id: string
+  name: string
+  event_count: number
+  events: AnnunciatorEvent[]
+}
+interface AnnunciatorData {
+  gap_threshold_seconds: number
+  channels: { field: string; label: string }[]
+  devices: AnnunciatorDevice[]
 }
 
 // ============================================================
@@ -45,6 +67,30 @@ const SEG: Record<number, { label: string; bar: string; ink: string; soft: strin
 }
 const NODATA = { label: 'No Data', bar: '#ececec', ink: 'text-black/35', soft: 'bg-black/[0.04]' }
 const segMeta = (code: number | null) => (code == null ? NODATA : SEG[code] ?? NODATA)
+
+// Annunciator severity from field suffix — trips are faults (red), alarms warn (orange).
+function annSeverity(field: string): 'trip' | 'alarm' | 'other' {
+  if (field.endsWith('_trip')) return 'trip'
+  if (field.endsWith('_alarm')) return 'alarm'
+  return 'other'
+}
+const ANN_META = {
+  trip:  { label: 'Trip',  bar: '#dc2626' },
+  alarm: { label: 'Alarm', bar: '#e17100' },
+  other: { label: 'Event', bar: '#9aa3b0' },
+} as const
+
+// duration_seconds comes straight from the API — display only, not computed here.
+function formatDuration(sec: number) {
+  if (sec < 60) return `${sec}s`
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (s > 0) return `${m}m ${s}s`
+  return `${m}m`
+}
+
 const LEGEND_ORDER = [1, 2, 4, 8, 0, null] as const
 const HATCH = 'repeating-linear-gradient(45deg,#efefef,#efefef 5px,#e6e6e6 5px,#e6e6e6 10px)'
 
@@ -110,6 +156,8 @@ export default function FaultsPage() {
 
   // active tooltip = "invIdx:segIdx"
   const [active, setActive] = useState<string | null>(null)
+
+  const [annActive, setAnnActive] = useState<string | null>(null)
 
   const fetchTimeline = useCallback(async () => {
     if (!site?.id) { setLoading(false); return }
@@ -330,6 +378,140 @@ export default function FaultsPage() {
           })}
         </div>
       </section>
+
+            {/* ============ ANNUNCIATOR ============ */}
+      {data.annunciator && data.annunciator_data && (
+        <>
+          <div className="pt-8"><Divider /></div>
+          <section className="pt-8">
+            <SectionHeader
+              title="Annunciator"
+              meta="Transformer protection alarms & trips · times in IST"
+            />
+
+            {/* legend */}
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mb-5">
+              {(['alarm', 'trip'] as const).map((k) => (
+                <span key={k} className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: ANN_META[k].bar }} />
+                  <span className="text-[12px] text-black/60 font-medium">{ANN_META[k].label}</span>
+                </span>
+              ))}
+            </div>
+
+            {/* axis */}
+            <div className="relative h-5 mb-1">
+              {ticks.map((t) => (
+                <span
+                  key={t}
+                  className="absolute text-[10.5px] font-semibold text-black/35 tabular-nums whitespace-nowrap"
+                  style={{ left: `${(t / 1440) * 100}%`, transform: t === 0 ? 'none' : t === 1440 ? 'translateX(-100%)' : 'translateX(-50%)' }}
+                >
+                  {formatMinutesTick(t)}
+                </span>
+              ))}
+            </div>
+
+            {/* lanes — one per annunciator device; events are sparse bands over an empty track */}
+            <div>
+              {data.annunciator_data.devices.map((dev, d) => {
+                const ongoing = dev.events.some((e) => e.ongoing)
+                return (
+                  <div key={dev.device_id} className={`py-4 ${d === 0 ? '' : 'border-t border-black/[0.06]'}`}>
+                    {/* lane header — name + active (if ongoing) + event count */}
+                    <div className="flex items-center gap-2 mb-2.5 min-w-0">
+                      <span className="text-[14px] font-semibold text-black">{dev.name}</span>
+                      {ongoing && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full text-[#dc2626] bg-[#dc2626]/[0.10]">
+                          <span className="w-[5px] h-[5px] rounded-full bg-[#dc2626] animate-pulse" />
+                          Active
+                        </span>
+                      )}
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-black/55 bg-black/[0.05]">
+                        {dev.event_count === 0 ? 'No events' : `${dev.event_count} event${dev.event_count === 1 ? '' : 's'}`}
+                      </span>
+                    </div>
+
+                    {/* the swimlane */}
+                    <div className="relative">
+                      <div
+                        className="relative h-[34px] rounded-md overflow-hidden bg-black/[0.03]"
+                        style={{ boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.04)' }}
+                        onMouseLeave={() => setAnnActive((a) => (a?.startsWith(`${d}:`) ? null : a))}
+                      >
+                        {/* gridlines */}
+                        <div className="absolute inset-0 pointer-events-none">
+                          {ticks.map((t) => (
+                            <div key={t} className="absolute top-0 bottom-0" style={{ left: `${(t / 1440) * 100}%`, width: 1, background: 'rgba(0,0,0,0.05)' }} />
+                          ))}
+                        </div>
+
+                        {/* quiet-day hint */}
+                        {dev.events.length === 0 && (
+                          <div className="absolute inset-0 flex items-center justify-center text-[11px] text-black/30 font-medium pointer-events-none">
+                            No alarms or trips
+                          </div>
+                        )}
+
+                        {/* event bands */}
+                        {dev.events.map((ev, e) => {
+                          const startMin = Math.max(0, minutesFromIstDayStart(ev.start, data.date))
+                          const endMin = Math.min(1440, minutesFromIstDayStart(ev.end, data.date))
+                          if (endMin <= startMin) return null
+                          const sev = annSeverity(ev.field)
+                          const trip = sev === 'trip'
+                          const isActive = annActive === `${d}:${e}`
+                          return (
+                            <button
+                              key={e}
+                              type="button"
+                              onMouseEnter={() => setAnnActive(`${d}:${e}`)}
+                              onClick={() => setAnnActive(`${d}:${e}`)}
+                              className="absolute top-0 bottom-0 cursor-pointer outline-none"
+                              style={{
+                                left: `${(startMin / 1440) * 100}%`,
+                                width: `${((endMin - startMin) / 1440) * 100}%`,
+                                minWidth: trip ? 6 : 4,
+                                background: ANN_META[sev].bar,
+                                boxShadow: trip ? '0 0 0 1px #fff, 0 0 7px rgba(220,38,38,0.55)' : '0 0 0 1px #fff',
+                                outline: isActive ? '2px solid rgba(0,0,0,0.6)' : 'none',
+                                outlineOffset: -2,
+                                zIndex: isActive ? 4 : trip ? 3 : 2,
+                              }}
+                            />
+                          )
+                        })}
+                      </div>
+
+                      {/* tooltip — label · time range · API-provided duration */}
+                      {annActive?.startsWith(`${d}:`) && (() => {
+                        const e = Number(annActive.split(':')[1])
+                        const ev = dev.events[e]
+                        if (!ev) return null
+                        const startMin = minutesFromIstDayStart(ev.start, data.date)
+                        const endMin = minutesFromIstDayStart(ev.end, data.date)
+                        const centerPct = Math.min(88, Math.max(12, ((startMin + endMin) / 2 / 1440) * 100))
+                        const m = ANN_META[annSeverity(ev.field)]
+                        return (
+                          <div
+                            className="absolute z-10 rounded-lg border border-black bg-white px-3 py-2 whitespace-nowrap pointer-events-none shadow-sm"
+                            style={{ bottom: 'calc(100% + 6px)', left: `${centerPct}%`, transform: 'translateX(-50%)' }}
+                          >
+                            <p className="text-[12px] font-semibold" style={{ color: m.bar }}>{ev.label}</p>
+                            <p className="text-[11px] text-black/55 tabular-nums mt-0.5">
+                              {istClock(ev.start)} – {ev.ongoing ? 'now' : istClock(ev.end)} · {formatDuration(ev.duration_seconds)}
+                            </p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }
