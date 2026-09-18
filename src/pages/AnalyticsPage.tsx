@@ -76,7 +76,13 @@ const DEVICE_TYPE_LABEL: Record<string, string> = {
   INVERTER: 'Inverter',
   METER: 'Meter',
   WEATHER_STATION: 'Weather Station',
+  TRANSFORMER: 'Transformer',
 }
+
+// Extends SiteDevice with an optional substation tag — set only on meters
+// pulled in from a linked substation site, so the picker can label them
+// distinctly from the plant's own meter.
+type AnalyticsDevice = SiteDevice & { substationName?: string }
 
 // ---- Helpers ----
 
@@ -317,7 +323,7 @@ function ChartRowCard({
   row: ChartRow
   metrics: Metric[]
   metricsLoading: boolean
-  devices: SiteDevice[]
+  devices: AnalyticsDevice[]
   onChange: (patch: Partial<ChartRow>) => void
   onRemove: () => void
   onGenerate: () => void
@@ -525,7 +531,9 @@ function ChartRowCard({
             options={eligibleDevices.map((d) => ({
               id: d.id,
               label: d.name,
-              sublabel: DEVICE_TYPE_LABEL[d.device_type] ?? d.device_type,
+              sublabel: d.substationName
+                ? `Substation · ${d.substationName}`
+                : (DEVICE_TYPE_LABEL[d.device_type] ?? d.device_type),
             }))}
             selected={row.deviceIds}
             onChange={(ids) => onChange({ deviceIds: ids as number[] })}
@@ -699,14 +707,35 @@ function ChartRowCard({
 // ---- Main Page ----
 
 export default function AnalyticsPage() {
-  const { site, devices } = useSite()
-  const activeDevices = devices.filter(
-    (d) => d.is_active && (d.device_type === 'INVERTER' || d.device_type === 'METER' || d.device_type === 'WEATHER_STATION')
-  )
+  const { site, devices, allSites } = useSite()
 
   const [metrics, setMetrics] = useState<Metric[]>([])
   const [metricsLoading, setMetricsLoading] = useState(true)
   const [chartRows, setChartRows] = useState<ChartRow[]>([newChartRow()])
+  const [subMeters, setSubMeters] = useState<AnalyticsDevice[]>([])
+
+  // Chartable device types follow the metric catalog — no hard-coded list, so
+  // transformer (and any future type) surfaces automatically once a metric
+  // for it exists.
+  const metricDeviceTypes = useMemo(
+    () => new Set(metrics.flatMap((m) => m.device_types)),
+    [metrics],
+  )
+
+  // Substations linked to this site — checked both directions (a substation
+  // that is a child of this site, or this site's parent if it's a
+  // substation), so it works whichever way parent_site points.
+  const substationSites = useMemo(() => {
+    if (!site) return []
+    const children = allSites.filter((s) => s.site_type === 'SUBSTATION' && s.parent_site === site.id && s.is_active)
+    const parent = allSites.find((s) => s.id === site.parent_site && s.site_type === 'SUBSTATION' && s.is_active)
+    return parent ? [...children, parent] : children
+  }, [allSites, site])
+
+  const activeDevices: AnalyticsDevice[] = [
+    ...devices.filter((d) => d.is_active && metricDeviceTypes.has(d.device_type)),
+    ...subMeters,
+  ]
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -721,6 +750,23 @@ export default function AnalyticsPage() {
     }
     fetchMetrics()
   }, [])
+
+  // Substation meters live on a different site, so fetch them per linked
+  // substation and tag each with its substation name for the picker.
+  useEffect(() => {
+    if (substationSites.length === 0) { setSubMeters([]); return }
+    let cancelled = false
+    Promise.all(
+      substationSites.map((s) =>
+        api.get<{ devices: SiteDevice[] }>(`/sites/${s.id}/`)
+          .then((res) => (res.data.devices ?? [])
+            .filter((d) => d.device_type === 'METER' && d.is_active)
+            .map((d): AnalyticsDevice => ({ ...d, substationName: s.name })))
+          .catch(() => [] as AnalyticsDevice[]),
+      ),
+    ).then((groups) => { if (!cancelled) setSubMeters(groups.flat()) })
+    return () => { cancelled = true }
+  }, [substationSites])
 
   function updateRow(id: string, patch: Partial<ChartRow>) {
     setChartRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
