@@ -49,13 +49,23 @@ interface AnalyticsResponse {
   data: DataRow[]
 }
 
+// Selected devices, grouped by which site they belong to — plant devices
+// under the plant's own site id, each substation's meters under that
+// substation's own id. Analytics is strictly single-site (`site` and
+// `devices` must belong to the same site on the backend), so this grouping
+// is what drives how many requests generateRow fires.
+interface DeviceSelection {
+  siteId: number
+  deviceIds: number[]
+}
+
 // Each row is fully self-contained: its own metrics, devices, date,
 // loading state, and fetched result. Generating one row never touches
 // any other row's data or fires any other row's request.
 interface ChartRow {
   id: string
   metricKeys: string[]
-  deviceIds: number[]
+  selections: DeviceSelection[]
   date: string
   loading: boolean
   hasGenerated: boolean
@@ -79,10 +89,11 @@ const DEVICE_TYPE_LABEL: Record<string, string> = {
   TRANSFORMER: 'Transformer',
 }
 
-// Extends SiteDevice with an optional substation tag — set only on meters
-// pulled in from a linked substation site, so the picker can label them
-// distinctly from the plant's own meter.
-type AnalyticsDevice = SiteDevice & { substationName?: string }
+// Extends SiteDevice with the id of the site it actually belongs to (plant
+// or substation) plus an optional substation tag for internal bookkeeping —
+// siteId drives request scoping; substationName is deliberately NOT shown
+// in the picker (real meter names — Main/Check/Standby — must stay visible).
+type AnalyticsDevice = SiteDevice & { siteId: number; substationName?: string }
 
 // ---- Helpers ----
 
@@ -109,7 +120,7 @@ function newChartRow(): ChartRow {
   return {
     id: crypto.randomUUID(),
     metricKeys: [],
-    deviceIds: [],
+    selections: [],
     date: todayString(),
     loading: false,
     hasGenerated: false,
@@ -330,7 +341,7 @@ function ChartRowCard({
   canRemove: boolean
 }) {
   const selectedMetrics = metrics.filter((m) => row.metricKeys.includes(m.key))
-  const canGenerate = row.metricKeys.length > 0 && row.deviceIds.length > 0 && !row.loading
+  const canGenerate = row.metricKeys.length > 0 && row.selections.some((s) => s.deviceIds.length > 0) && !row.loading
 
   // No metrics picked yet → show every device. Once metrics are picked,
   // only show devices whose type applies to at least one selected metric —
@@ -511,13 +522,18 @@ function ChartRowCard({
               const keys = ids as string[]
               const newMetrics = metrics.filter((m) => keys.includes(m.key))
               const validTypes = new Set(newMetrics.flatMap((m) => m.device_types))
-              const validIds = row.deviceIds.filter((id) => {
-                const d = devices.find((dev) => dev.id === id)
-                return d && validTypes.has(d.device_type)
-              })
+              const validSelections = row.selections
+                .map((s) => ({
+                  siteId: s.siteId,
+                  deviceIds: s.deviceIds.filter((id) => {
+                    const d = devices.find((dev) => dev.id === id)
+                    return d && validTypes.has(d.device_type)
+                  }),
+                }))
+                .filter((s) => s.deviceIds.length > 0)
               onChange({
                 metricKeys: keys,
-                deviceIds: validIds,
+                selections: validSelections,
                 data: null,
                 hasGenerated: false,
                 error: null,
@@ -531,12 +547,19 @@ function ChartRowCard({
             options={eligibleDevices.map((d) => ({
               id: d.id,
               label: d.name,
-              sublabel: d.substationName
-                ? `Substation · ${d.substationName}`
-                : (DEVICE_TYPE_LABEL[d.device_type] ?? d.device_type),
+                            sublabel: DEVICE_TYPE_LABEL[d.device_type] ?? d.device_type,
             }))}
-            selected={row.deviceIds}
-            onChange={(ids) => onChange({ deviceIds: ids as number[] })}
+            selected={row.selections.flatMap((s) => s.deviceIds)}
+            onChange={(ids) => {
+              const picked = eligibleDevices.filter((d) => ids.includes(d.id))
+              const bySite = new Map<number, number[]>()
+              for (const d of picked) {
+                bySite.set(d.siteId, [...(bySite.get(d.siteId) ?? []), d.id])
+              }
+              onChange({
+                selections: Array.from(bySite, ([siteId, deviceIds]) => ({ siteId, deviceIds })),
+              })
+            }}
             minWidth={200}
           />
 
@@ -733,7 +756,9 @@ export default function AnalyticsPage() {
   }, [allSites, site])
 
   const activeDevices: AnalyticsDevice[] = [
-    ...devices.filter((d) => d.is_active && metricDeviceTypes.has(d.device_type)),
+    ...devices
+      .filter((d) => d.is_active && metricDeviceTypes.has(d.device_type))
+      .map((d): AnalyticsDevice => ({ ...d, siteId: site?.id ?? -1 })),
     ...subMeters,
   ]
 
@@ -752,7 +777,10 @@ export default function AnalyticsPage() {
   }, [])
 
   // Substation meters live on a different site, so fetch them per linked
-  // substation and tag each with its substation name for the picker.
+  // Substation meters live on a different site than the plant, so fetch them
+  // per linked substation. Tagged with the substation's OWN site id — the
+  // backend requires `site` and `devices` to belong to the same site, so
+  // this is what generateRow uses to scope each request correctly.
   useEffect(() => {
     if (substationSites.length === 0) { setSubMeters([]); return }
     let cancelled = false
@@ -761,7 +789,7 @@ export default function AnalyticsPage() {
         api.get<{ devices: SiteDevice[] }>(`/sites/${s.id}/`)
           .then((res) => (res.data.devices ?? [])
             .filter((d) => d.device_type === 'METER' && d.is_active)
-            .map((d): AnalyticsDevice => ({ ...d, substationName: s.name })))
+            .map((d): AnalyticsDevice => ({ ...d, siteId: s.id, substationName: s.name })))
           .catch(() => [] as AnalyticsDevice[]),
       ),
     ).then((groups) => { if (!cancelled) setSubMeters(groups.flat()) })
@@ -780,16 +808,43 @@ export default function AnalyticsPage() {
     setChartRows((prev) => [...prev, newChartRow()])
   }
 
-  // Only this row's request fires — every other row's data and chart
-  // stay exactly as they are.
+  // One analytics call per site present in this row's selections — the
+  // backend filters devices with .filter(site=site, ...), so `site` and
+  // `devices` must belong together or the mismatched devices silently drop.
+  // Results are merged client-side: legends concatenate, and data rows union
+  // on timestamp so plant and substation series land on one chart/axis.
   async function generateRow(row: ChartRow) {
-    if (!site?.id || row.metricKeys.length === 0 || row.deviceIds.length === 0) return
+    const activeSelections = row.selections.filter((s) => s.deviceIds.length > 0)
+    if (activeSelections.length === 0 || row.metricKeys.length === 0) return
     updateRow(row.id, { loading: true, error: null })
     try {
-      const res = await api.get<AnalyticsResponse>(
-        `/influx/analytics/?site=${site.id}&metrics=${row.metricKeys.join(',')}&devices=${row.deviceIds.join(',')}&date=${row.date}`
+      const responses = await Promise.all(
+        activeSelections.map((s) =>
+          api.get<AnalyticsResponse>(
+            `/influx/analytics/?site=${s.siteId}&metrics=${row.metricKeys.join(',')}&devices=${s.deviceIds.join(',')}&date=${row.date}`
+          )
+        )
       )
-      updateRow(row.id, { data: res.data, loading: false, hasGenerated: true, error: null })
+
+      const legend = responses.flatMap((r) => r.data.legend)
+
+      // Union rows by timestamp — each response only contributes its own
+      // legend's keys, so merging is a plain per-timestamp object spread.
+      const byTime = new Map<string, DataRow>()
+      for (const res of responses) {
+        for (const dataRow of res.data.data) {
+          const existing = byTime.get(dataRow.time) ?? ({ time: dataRow.time } as DataRow)
+          byTime.set(dataRow.time, { ...existing, ...dataRow })
+        }
+      }
+      const data = Array.from(byTime.values()).sort((a, b) => a.time.localeCompare(b.time))
+
+      updateRow(row.id, {
+        data: { date: responses[0].data.date, legend, data },
+        loading: false,
+        hasGenerated: true,
+        error: null,
+      })
     } catch (err) {
       console.error('Analytics fetch error:', err)
       updateRow(row.id, { loading: false, hasGenerated: true, error: 'Failed to load this chart.' })
@@ -798,7 +853,7 @@ export default function AnalyticsPage() {
 
   function refreshAllGenerated() {
     chartRows.forEach((row) => {
-      if (row.hasGenerated && row.metricKeys.length > 0 && row.deviceIds.length > 0) {
+      if (row.hasGenerated && row.metricKeys.length > 0 && row.selections.some((s) => s.deviceIds.length > 0)) {
         generateRow(row)
       }
     })
