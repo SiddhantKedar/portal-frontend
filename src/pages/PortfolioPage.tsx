@@ -440,28 +440,28 @@ export default function PortfolioPage() {
                 {fleet && <HealthFooter online={fleet.inverters_online} total={fleet.inverters_total} />}
               </div>
             </div>
-            <div className="flex items-start justify-between py-3.5 gap-4">
-              <div className="flex items-center gap-2.5 min-w-0 pt-0.5">
-                <Activity size={15} className="text-black/40 shrink-0" strokeWidth={2} />
-                <span className={T.eyebrow}>Inverter Status</span>
-              </div>
-              {fleet && Object.values(fleet.states).some((v) => v > 0) ? (
-                <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1.5 shrink-0">
-                  {STATE_ORDER.map((k) => {
-                    const c = fleet.states[k]
-                    if (c <= 0) return null
-                    return (
-                      <span key={k} className="inline-flex items-baseline gap-1.5">
-                        <span className={`text-[18px] font-semibold tabular-nums leading-none ${STATE_META[k].text}`}>{c}</span>
-                        <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-black/45">{STATE_META[k].label}</span>
-                      </span>
-                    )
-                  })}
-                </div>
-              ) : (
-                <span className="text-[13px] text-black/40">—</span>
-              )}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between py-3.5 gap-2 sm:gap-4">
+            <div className="flex items-center gap-2.5 shrink-0 pt-0.5">
+              <Activity size={15} className="text-black/40 shrink-0" strokeWidth={2} />
+              <span className={`${T.eyebrow} whitespace-nowrap`}>Inverter Status</span>
             </div>
+            {fleet && Object.values(fleet.states).some((v) => v > 0) ? (
+              <div className="flex flex-wrap items-baseline justify-start sm:justify-end gap-x-4 gap-y-1.5 min-w-0">
+                {STATE_ORDER.map((k) => {
+                  const c = fleet.states[k]
+                  if (c <= 0) return null
+                  return (
+                    <span key={k} className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+                      <span className={`text-[18px] font-semibold tabular-nums leading-none ${STATE_META[k].text}`}>{c}</span>
+                      <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-black/45">{STATE_META[k].label}</span>
+                    </span>
+                  )
+                })}
+              </div>
+            ) : (
+              <span className="text-[13px] text-black/40">—</span>
+            )}
+          </div>
           </div>
         </div>
       </section>
