@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Zap, TrendingUp, Cpu, RefreshCw,Building2, ChevronRight, Gauge, Activity } from 'lucide-react'
+import { Zap, TrendingUp, Cpu, RefreshCw, Building2, ChevronRight, Gauge, Activity, CalendarDays, Leaf } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '@/api/axios'
 import { useAutoRefresh } from '@/api/useAutoRefresh'
@@ -22,6 +22,9 @@ const T = {
 interface PortfolioSummary {
   total_active_power_kw: number
   total_energy_today_kwh: number | null
+  total_energy_month_kwh: number | null  
+  cuf_pct: number | null
+  co2_avoided_today_kg: number | null 
   ac_capacity_kw?: number
   sites_online: number
   sites_total: number
@@ -35,12 +38,17 @@ interface PortfolioSummary {
 interface SiteSummary {
   site_id: number
   site_name: string
+  location: string
   installer_name: string | null
   active_power_kw: number
   energy_today_kwh: number | null
+  energy_month_kwh: number | null        
+  performance_ratio_pct: number | null   
+  cuf_pct: number | null                   
+  capabilities: { weather: boolean } 
   dc_capacity_kw: number | null
   ac_capacity_kw: number | null
-    meter_online: boolean
+  meter_online: boolean
   logger_online: boolean
   logger_last_seen: string | null
   inverters_online: number
@@ -95,6 +103,27 @@ function siteStates(site: SiteSummary) {
     { key: 'stopped', count: site.states.stopped },
     { key: 'other',   count: site.states.other },
   ].filter((s) => s.count > 0)
+}
+
+// Visual-only clustering of same-location sites. Location is never displayed.
+
+
+interface SiteBlock { key: string; sites: SiteSummary[]; located: boolean }
+
+function groupByLocation(sites: SiteSummary[]): SiteBlock[] {
+  const byLoc = new Map<string, SiteSummary[]>()
+  const loose: SiteSummary[] = []
+  for (const s of sites) {
+    const k = (s.location ?? '').trim().toLowerCase()
+    if (!k) { loose.push(s); continue }
+    const g = byLoc.get(k)
+    if (g) g.push(s); else byLoc.set(k, [s])
+  }
+  const blocks: SiteBlock[] = [...byLoc.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, g]) => ({ key: k, sites: g, located: true }))
+  if (loose.length) blocks.push({ key: '__none__', sites: loose, located: false })
+  return blocks
 }
 
 // ============================================================
@@ -156,6 +185,32 @@ function HealthFooter({ online, total }: { online: number; total: number }) {
   )
 }
 
+
+// Multi-site locations sit in a lifted white card; single-site locations and
+// no-location sites render plain, aligned to the same inset.
+function SiteGroups({ sites, showInstaller = false }: { sites: SiteSummary[]; showInstaller?: boolean }) {
+  const blocks = groupByLocation(sites)
+
+  return (
+    <div className="p-2.5 space-y-2.5">
+      {blocks.map((b) => (
+        <div
+          key={b.key}
+          className={`rounded-xl overflow-hidden divide-y divide-black/[0.06] ${
+            b.located && b.sites.length > 1
+              ? 'bg-white shadow-[0_1px_4px_rgba(0,0,0,0.25)] ring-1 ring-black/[0.04]'
+              : ''
+          }`}
+        >
+          {b.sites.map((s) => (
+            <SiteRow key={s.site_id} site={s} showInstaller={showInstaller} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ============================================================
 // Per-customer card — site rows in the PlantOverview visual language
 // ============================================================
@@ -199,24 +254,19 @@ function CustomerBlock({ customer }: { customer: CustomerSummary }) {
         </div>
       </div>
 
-      <div className="divide-y divide-black/[0.06]">
-        {customer.sites.map((site) => (
-          <SiteRow key={site.site_id} site={site} />
-        ))}
-      </div>
+      <SiteGroups sites={customer.sites} />
     </div>
   )
 }
 
 function FlatSiteList({ sites }: { sites: SiteSummary[] }) {
   return (
-    <div className="rounded-2xl border border-black/15 overflow-hidden divide-y divide-black/[0.06]">
-      {sites.map((site) => (
-        <SiteRow key={site.site_id} site={site} showInstaller />
-      ))}
+    <div className="rounded-2xl border border-black/15 overflow-hidden">
+      <SiteGroups sites={sites} showInstaller />
     </div>
   )
 }
+
 
 // Site Row
 function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInstaller?: boolean }) {
@@ -225,28 +275,39 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
     ? Math.min(Math.round((site.active_power_kw / site.ac_capacity_kw) * 100), 100) : null
   const allOnline = site.inverters_total > 0 && site.inverters_online === site.inverters_total
   const segs = siteStates(site)
+  // Fixed 5 slots; PR slot stays empty (not removed) so columns align across rows
+  const metrics = [
+    { label: 'Power',        value: site.active_power_kw.toLocaleString(undefined, { maximumFractionDigits: 1 }), unit: 'kW', accent: true },
+    { label: 'Energy Today', value: site.energy_today_kwh?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—', unit: 'kWh', accent: false },
+    { label: 'This Month',   value: site.energy_month_kwh?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—', unit: 'kWh', accent: false },
+    { label: 'CUF',          value: site.cuf_pct?.toFixed(1) ?? '—', unit: '%', accent: false },
+    site.capabilities?.weather
+      ? { label: 'PR', value: site.performance_ratio_pct?.toFixed(1) ?? '—', unit: '%', accent: false }
+      : null,
+  ]
 
   return (
     <button type="button" onClick={() => navigate(`/sites/${site.site_id}/plant`)}
       className="group w-full text-left px-5 py-5 hover:bg-black/[0.02] transition-colors">
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-        <div className="min-w-0 sm:flex-1">
+      <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-8">
+        <div className="min-w-0 xl:flex-1">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-[15px] font-semibold text-black truncate group-hover:text-[#e17100] transition-colors">{site.site_name}</p>
             {!site.logger_online && (<span className={RED_CHIP}>Offline</span>)}
             {!site.meter_online && (<span className={RED_CHIP}>Grid offline</span>)}
           </div>
-          <p className="mt-1.5 text-[11px] text-black/40 truncate">{showInstaller && site.installer_name ? `${site.installer_name} · ` : ''}{formatLastUpdated(site.last_updated)}</p>
-
+          <p className="mt-1.5 text-[11px] text-black/40 truncate">
+            {showInstaller && site.installer_name ? `${site.installer_name} · ` : ''}{formatLastUpdated(site.last_updated)}
+          </p>
           {site.inverters_total > 0 && (
             <div className="mt-2 flex items-center flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold tabular-nums text-black">
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold tabular-nums text-black whitespace-nowrap">
                 <span className={`w-1.5 h-1.5 rounded-full ${allOnline ? 'bg-[#497d00]' : 'bg-[#e17100]'}`} />
                 {site.inverters_online}/{site.inverters_total} online
               </span>
               {segs.map((s) => (
-                <span key={s.key} className={`text-[12px] font-semibold px-1.5 py-0.5 rounded ${STATE_META[s.key].text} ${STATE_META[s.key].bg}`}>
+                <span key={s.key} className={`text-[12px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${STATE_META[s.key].text} ${STATE_META[s.key].bg}`}>
                   {s.count} {STATE_META[s.key].label}
                 </span>
               ))}
@@ -254,16 +315,27 @@ function SiteRow({ site, showInstaller = false }: { site: SiteSummary; showInsta
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-4 sm:flex sm:items-center sm:justify-end sm:gap-10 tabular-nums shrink-0">
-          <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Power</p><p className="text-[17px] sm:text-[16px] font-semibold text-[#e17100] mt-1">{site.active_power_kw.toFixed(1)}<span className="text-black/40 text-[11px] font-medium ml-1">kW</span></p></div>
-          <div className="sm:text-right"><p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold">Today</p><p className="text-[17px] sm:text-[16px] font-semibold text-black mt-1">{site.energy_today_kwh?.toLocaleString() ?? '—'}<span className="text-black/40 text-[11px] font-medium ml-1">kWh</span></p></div>
-          <ChevronRight size={18} className="hidden sm:block text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
+        <div className="grid grid-cols-3 sm:grid-cols-5 xl:grid-cols-[repeat(5,104px)] gap-x-4 gap-y-3 xl:gap-x-5 tabular-nums shrink-0">
+          {metrics.map((m, i) => m ? (
+            <div key={m.label} className="min-w-0 xl:text-right">
+              <p className="text-[10px] uppercase tracking-[0.08em] text-black/50 font-semibold whitespace-nowrap">{m.label}</p>
+              <p className={`text-[16px] font-semibold mt-1 whitespace-nowrap ${m.accent ? 'text-[#e17100]' : 'text-black'}`}>
+                {m.value}<span className="text-black/40 text-[11px] font-medium ml-1">{m.unit}</span>
+              </p>
+            </div>
+          ) : (
+            <div key={`empty-${i}`} className="hidden sm:block" />
+          ))}
         </div>
+
+        <ChevronRight size={18} className="hidden xl:block text-black/20 group-hover:text-[#e17100] transition-colors shrink-0" />
       </div>
 
       {util !== null && (
         <div className="mt-4 flex items-center gap-3">
-          <div className="h-1.5 flex-1 bg-black/[0.06] rounded-full overflow-hidden"><div className="h-full rounded-full bg-[#e17100]" style={{ width: `${util}%` }} /></div>
+          <div className="h-1.5 flex-1 bg-black/[0.06] rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-[#e17100]" style={{ width: `${util}%` }} />
+          </div>
           <span className="text-[11px] text-black/45 tabular-nums shrink-0">{util}% of {site.ac_capacity_kw!.toLocaleString()} kW AC</span>
         </div>
       )}
@@ -313,6 +385,22 @@ export default function PortfolioPage() {
   const fleetUtil = fleet?.ac_capacity_kw
     ? Math.round((fleet.total_active_power_kw / fleet.ac_capacity_kw) * 100)
     : 0
+
+  const fmtKwh = (v?: number | null) =>
+    v == null ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: 0 })
+
+  // 86,837 kg reads better as 86.8 t; small sites stay in kg
+  const fmtCo2 = (kg?: number | null) =>
+    kg == null ? { value: '—', unit: 't' }
+    : kg >= 1000 ? { value: (kg / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }), unit: 't' }
+    : { value: kg.toLocaleString(undefined, { maximumFractionDigits: 0 }), unit: 'kg' }
+
+  const energyKpis = [
+    { label: 'Energy Today', icon: TrendingUp,   value: fmtKwh(fleet?.total_energy_today_kwh), unit: 'kWh' },
+    { label: 'Energy This Month',   icon: CalendarDays, value: fmtKwh(fleet?.total_energy_month_kwh), unit: 'kWh' },
+  ]
+
+  const co2 = fmtCo2(fleet?.co2_avoided_today_kg)
 
 
   if (loading) {
@@ -364,9 +452,9 @@ export default function PortfolioPage() {
       <section className="pt-8 pb-2">
         <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8 lg:gap-0 lg:divide-x lg:divide-black/15">
 
-          {/* Hero — Total Active Power */}
+          {/* Hero — generation: live power + energy */}
           <div className="lg:pr-10 min-w-0">
-            <div className="relative flex items-stretch gap-3">
+            <div className="relative flex items-stretch gap-3 h-full">
               <span className="w-1 rounded-full bg-[#e17100] shrink-0 self-stretch" />
               <div className="flex-1 min-w-0 rounded-2xl bg-gradient-to-b from-[#e17100]/[0.05] to-transparent px-5 py-5">
                 <div className="flex items-center justify-between mb-4">
@@ -380,8 +468,6 @@ export default function PortfolioPage() {
                   <span className={T.unit}>kW</span>
                 </div>
 
-                {/* Fleet utilisation vs total AC capacity — only shown when the
-                    endpoint provides ac_capacity_kw; degrades gracefully otherwise. */}
                 {fleet?.ac_capacity_kw ? (
                   <div className="mt-5">
                     <div className="flex items-center justify-between mb-1.5">
@@ -398,20 +484,37 @@ export default function PortfolioPage() {
                 ) : (
                   <p className="text-[12px] text-[#497d00] font-semibold mt-3">Live across all sites</p>
                 )}
+
+                {/* Energy strip: 2 items now, 3 columns on desktop once CO₂ is added */}
+                <div className={`mt-6 pt-5 border-t border-black/10 grid grid-cols-2 ${energyKpis.length >= 3 ? 'sm:grid-cols-3' : ''} gap-x-6 gap-y-4`}>
+                  {energyKpis.map((k) => (
+                    <div key={k.label} className="min-w-0">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <k.icon size={13} className="text-black/40 shrink-0" strokeWidth={2} />
+                        <span className="text-[11px] uppercase tracking-[0.1em] font-semibold text-black/55 whitespace-nowrap">
+                          {k.label}
+                        </span>
+                      </div>
+                      <span className={T.metricL}>
+                        {k.value}<span className={`${T.unit} ml-1`}>{k.unit}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Rail — the three supporting metrics */}
           <div className="lg:pl-10 flex flex-col justify-center divide-y divide-black/10">
+            
             <div className="flex items-center justify-between py-3.5 gap-4">
               <div className="flex items-center gap-2.5 min-w-0">
-                <TrendingUp size={15} className="text-black/40 shrink-0" strokeWidth={2} />
-                <span className={T.eyebrow}>Energy Today</span>
+                <Leaf size={15} className="text-black/40 shrink-0" strokeWidth={2} />
+                <span className={T.eyebrow}>CO₂ Avoided Today</span>
               </div>
               <span className={`${T.metricL} shrink-0`}>
-                {fleet?.total_energy_today_kwh?.toLocaleString() ?? '—'}
-                <span className={`${T.unit} ml-1`}>kWh</span>
+                {co2.value}<span className={`${T.unit} ml-1`}>{co2.unit}</span>
               </span>
             </div>
 
