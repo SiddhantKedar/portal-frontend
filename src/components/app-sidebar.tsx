@@ -61,6 +61,7 @@ export function AppSidebar() {
   // (/portfolio, /profile) `base` is null and the Monitor group is suppressed —
   // those links have no site to point at.
   const base = site ? `/sites/${site.id}` : null
+  const household = site?.category === 'HOUSEHOLD'
 
   return (
     <Sidebar className="bg-black border-r border-white/10 text-white [&_[data-sidebar=sidebar]]:bg-black">
@@ -128,17 +129,18 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
-                      to={`${base}/plant`}
+                      to={household ? `${base}/household` : `${base}/plant`}
                       onClick={closeOnMobile}
                       className={({ isActive }) => (isActive ? NAV_ACTIVE : NAV_INACTIVE)}
                     >
                       <Factory size={16} />
-                      <span className="text-[13px]">Plant Overview</span>
+                      <span className="text-[13px]">{household ? 'Overview' : 'Plant Overview'}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
                 {/* Inverter Overview + sub items */}
+                {!household && (
                 <SidebarMenu>
                   <Collapsible defaultOpen className="group/collapsible">
                     <SidebarMenuItem>
@@ -186,7 +188,10 @@ export function AppSidebar() {
                   </Collapsible>
                 </SidebarMenu>
 
+              )}
+
                 {/* SCB — String Combiner Box */}
+                {!household && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
@@ -199,6 +204,7 @@ export function AppSidebar() {
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                )}
 
                 {/* Meter Overview — only if meters exist */}
                 {hasMeters && (
@@ -231,6 +237,7 @@ export function AppSidebar() {
                 </SidebarMenuItem>
 
                 {/* Weather */}
+                {!household && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <NavLink
@@ -243,6 +250,7 @@ export function AppSidebar() {
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+        )}
 
                 {/* Reports */}
                 <SidebarMenuItem>
