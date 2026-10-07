@@ -10,6 +10,7 @@ export interface Site {
   id: number
   name: string
   site_type: 'GENERATION' | 'SUBSTATION' | 'OTHER'
+  category: 'UTILITY' | 'HOUSEHOLD'
   parent_site: number | null
   location: string
   influx_site_id: string

@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useParams, useLocation} from 'react-router-dom'
 import { Fragment } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
@@ -17,6 +17,7 @@ import UserPage from './pages/UserPage'
 import EnergyFlowPage from './pages/EnergyFlowPage'
 import ReportsPage from './pages/ReportsPage'
 import FaultsPage from './pages/FaultsPage'
+import HouseholdOverviewPage from './pages/HouseholdOverviewPage'
 
 function CenteredMessage({ text, tone = 'muted' }: { text: string; tone?: 'muted' | 'error' }) {
   return (
@@ -53,7 +54,8 @@ function HomeResolver() {
     )
   }
   if (selectableSites.length === 1) {
-    return <Navigate to={`/sites/${selectableSites[0].id}/plant`} replace />
+    const only = selectableSites[0]
+    return <Navigate to={`/sites/${only.id}/${only.category === 'HOUSEHOLD' ? 'household' : 'plant'}`} replace />
   }
   return <Navigate to="/portfolio" replace />
 }
@@ -63,10 +65,22 @@ function HomeResolver() {
 // React keeps the old page's state — including in-flight useAutoRefresh fetches.
 function SiteScope() {
   const { site } = useSite()
+  const { pathname } = useLocation()
 
   // Bootstrap is finished by the time we render (PrivateRoute gates it), so an
   // unresolved id means the site genuinely isn't visible to this user.
   if (!site) return <Navigate to="/" replace />
+
+  // Household sites have no plant/meter/weather data; utility sites have no
+  // household page. Bounce direct URLs to the right landing page.
+  const page = pathname.split('/')[3] ?? ''
+  if (site.category === 'HOUSEHOLD') {
+    if (['', 'plant', 'inverters', 'scb', 'meter', 'weather', 'energy-flow'].includes(page)) {
+      return <Navigate to={`/sites/${site.id}/household`} replace />
+    }
+  } else if (page === 'household') {
+    return <Navigate to={`/sites/${site.id}/plant`} replace />
+  }
 
   return (
     <Fragment key={site.id}>
@@ -102,6 +116,7 @@ export default function App() {
           <Route path="/sites/:siteId" element={<SiteScope />}>
             <Route index element={<Navigate to="plant" replace />} />
             <Route path="plant" element={<PlantOverviewPage />} />
+            <Route path="household" element={<HouseholdOverviewPage />} />
             <Route path="inverters" element={<InverterOverviewPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="faults" element={<FaultsPage />} />
