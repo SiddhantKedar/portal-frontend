@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { AlertCircle} from 'lucide-react'
+import { AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import api from '@/api/axios'
 import type { LoginResponse } from '@/types/auth'
@@ -13,20 +13,34 @@ export default function LoginPage() {
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = async (e: React.SyntheticEvent) => {
+    const handleLogin = async (e: React.SyntheticEvent) => {
     e.preventDefault()
     setError('')
+
+    // The field accepts an email or a phone number; the API key is still `email`
+    const identifier = email.trim()
+    if (!identifier.includes('@') && identifier.replace(/\D/g, '').length < 10) {
+      setError('Enter a valid email or 10-digit phone number')
+      return
+    }
+
     setLoading(true)
     try {
-      const response = await api.post<LoginResponse>('/auth/login/', { email, password })
+      const response = await api.post<LoginResponse>('/auth/login/', { email: identifier, password })
       const { access, refresh, user } = response.data
       login(access, refresh, user)
       navigate('/')
     } catch (err: any) {
-      setError('Invalid email or password. Please try again.')
+      const status = err?.response?.status
+      setError(
+        status === 401 || status === 400 ? 'Incorrect login details or password'
+        : status === 403 ? 'Your account has been deactivated'
+        : 'Something went wrong. Please try again.'
+      )
     } finally {
       setLoading(false)
     }
@@ -85,11 +99,12 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-[12px] font-medium text-gray-600">
-                Email address
+                Email or phone number
               </Label>
               <Input
-                type="email"
-                placeholder="you@company.com"
+                type="text"
+                autoComplete="username"
+                placeholder="Email or phone number"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -101,14 +116,25 @@ export default function LoginPage() {
               <Label className="text-[12px] font-medium text-gray-600">
                 Password
               </Label>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="h-10 bg-white border-[#E5E5E5] text-[13px] text-black placeholder:text-gray-300 focus-visible:ring-0 focus-visible:border-black rounded-lg"
-              />
+                <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="h-10 pr-10 bg-white border-[#E5E5E5] text-[13px] text-black placeholder:text-gray-300 focus-visible:ring-0 focus-visible:border-black rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-400 hover:text-black transition-colors"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             <div className="text-right">

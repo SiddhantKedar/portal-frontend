@@ -1,6 +1,7 @@
 export interface User {
   id: number
   email: string
+  phone_number: string | null   // 10 digits, no country code; null if not set
   first_name: string
   last_name: string
   full_name: string
