@@ -75,6 +75,7 @@ interface PlantOverview {
     total_gen_kwh: number
     status: string
     inverter_status: { code: number; label: string } | null
+    faults?: { code: string; label: string; category: string }[] | null
     last_updated: string | null          // dummy offline row sends null
   }[]
   device_summary: {
@@ -943,6 +944,18 @@ function InverterLedger({ inverters }: { inverters: InverterRow[] }) {
               <span className="text-right tabular-nums text-[13px] font-semibold text-black">
                 {((inv.total_gen_kwh ?? 0) / 1000).toFixed(1)}
               </span>
+              
+              {/* Active faults — full-width line under the row; nothing for null or [] */}
+              {inv.faults && inv.faults.length > 0 && (
+                <div className="col-span-full flex flex-wrap gap-1.5 mt-2">
+                  {inv.faults.map((f) => (
+                    <span key={f.code} className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded whitespace-nowrap">
+                      <AlertTriangle size={11} strokeWidth={2.5} />
+                      {f.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
@@ -1498,6 +1511,7 @@ export default function PlantOverviewPage() {
         a.device_id.localeCompare(b.device_id, undefined, { numeric: true })
       )
       setOverview(res.data)
+      
     } catch (err) {
       console.error('Plant overview error:', err)
     } finally {
@@ -1671,6 +1685,17 @@ export default function PlantOverviewPage() {
       </div>
     )
   }
+
+  // Active faults grouped by fault type, for the message above the inverter table
+  const faultGroups = new Map<string, { label: string; names: string[] }>()
+  for (const inv of overview?.inverters ?? []) {
+    for (const f of inv.faults ?? []) {
+      const g = faultGroups.get(f.code)
+      if (g) g.names.push(inv.name)
+      else faultGroups.set(f.code, { label: f.label, names: [inv.name] })
+    }
+  }
+  const faultedCount = (overview?.inverters ?? []).filter((i) => (i.faults?.length ?? 0) > 0).length
 
   const capacityPct =
     overview && overview.plant.ac_capacity_kw
@@ -1994,6 +2019,33 @@ export default function PlantOverviewPage() {
           meta={`${overview?.device_summary.online ?? 0} of ${overview?.device_summary.total ?? 0} online`}
           accent="olive"
         />
+        {faultedCount > 0 && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50/60 px-4 py-3">
+            <p className="flex items-center gap-2 text-[13px] font-semibold text-red-700">
+              <AlertTriangle size={14} strokeWidth={2.25} className="shrink-0" />
+              {faultedCount > 1
+                ? `${faultedCount} inverters are reporting faults`
+                : `1 inverter is reporting ${faultGroups.size > 1 ? 'faults' : 'a fault'}`}
+            </p>
+            <ul className="mt-1.5 space-y-0.5 pl-[22px]">
+              {[...faultGroups.entries()].map(([code, g]) => {
+                // Up to four names, then "and N more"
+                const shown = g.names.slice(0, 4)
+                const extra = g.names.length - shown.length
+                return (
+                  <li key={code} className="text-[13px] text-black">
+                    <span className="font-semibold">{g.label}</span> on{' '}
+                    {extra > 0
+                      ? `${shown.join(', ')} and ${extra} more`
+                      : shown.length > 1
+                        ? `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
+                        : shown[0]}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
         <InverterLedger inverters={overview?.inverters ?? []} />
       </Section>
 
